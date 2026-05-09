@@ -6,3 +6,16 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Firebase
+.firebase/
+*-debug.log
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
