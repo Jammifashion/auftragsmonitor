@@ -14,7 +14,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen bg-slate-950 overflow-hidden font-sans">
       <Sidebar />
-      <div className="flex-1 ml-20 flex flex-col overflow-hidden">
+      <div className="flex-1 md:ml-20 flex flex-col overflow-hidden w-full">
         {children}
       </div>
     </div>

@@ -5,7 +5,7 @@ import { Textarea } from "./ui/textarea";
 import { processUniversalInput } from "../services/geminiService";
 import { toast } from "sonner";
 import { db } from "../lib/firebase";
-import { collection, addDoc, getDocs, query, where, serverTimestamp, doc, updateDoc, limit } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, where, serverTimestamp, doc, updateDoc, limit, deleteDoc, writeBatch } from "firebase/firestore";
 import { useAuth } from "../AuthContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { cn } from "@/lib/utils";
@@ -22,7 +22,8 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
   const [autoCalendar, setAutoCalendar] = useState(false);
   const [duplicateCheck, setDuplicateCheck] = useState<{ isDuplicate: boolean; similarOrderId?: string; reason?: string } | null>(null);
   const [pendingOrder, setPendingOrder] = useState<any>(null);
-  const [pendingClient, setPendingClient] = useState<any>(null);
+  const [pendingAction, setPendingAction] = useState<any>(null); // NEU
+  const [aiResponse, setAiResponse] = useState<string | null>(null); // State für die Antwort
   
   const recognitionRef = useRef<any>(null);
 
@@ -56,6 +57,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
 
   const upsertClient = async (clientData: any, userId: string): Promise<string | null> => {
     if (!clientData || !clientData.name) return null;
+    console.log("DEBUG: Upsert-Versuch für Cliente:", clientData); // LOG
     try {
       const q = query(
         collection(db, "clients"), 
@@ -68,17 +70,26 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
       
       if (!snap.empty) {
         const clientDoc = snap.docs[0];
-        // Only update if fresh info is provided
         const existing = clientDoc.data();
-        const update: any = { updatedAt: now };
-        if (clientData.telefon && clientData.telefon !== existing.telefon) update.telefon = clientData.telefon;
-        if (clientData.email && clientData.email !== existing.email) update.email = clientData.email;
-        if (clientData.adresse && clientData.adresse !== existing.adresse) update.adresse = clientData.adresse;
-        if (clientData.zahlungsinfo && clientData.zahlungsinfo !== existing.zahlungsinfo) update.zahlungsinfo = clientData.zahlungsinfo;
+        console.log("DEBUG: Bestehender Client gefunden, prüfe Updates:", existing);
         
-        await updateDoc(clientDoc.ref, update);
+        const update: any = { updatedAt: now };
+        let hasChanges = false;
+        
+        if (clientData.telefon && clientData.telefon !== existing.telefon) { update.telefon = clientData.telefon; hasChanges = true; }
+        if (clientData.email && clientData.email !== existing.email) { update.email = clientData.email; hasChanges = true; }
+        if (clientData.adresse && clientData.adresse !== existing.adresse) { update.adresse = clientData.adresse; hasChanges = true; }
+        if (clientData.zahlungsinfo && clientData.zahlungsinfo !== existing.zahlungsinfo) { update.zahlungsinfo = clientData.zahlungsinfo; hasChanges = true; }
+        
+        if (hasChanges) {
+           console.log("DEBUG: Update wird durchgeführt:", update);
+           await updateDoc(clientDoc.ref, update);
+        } else {
+           console.log("DEBUG: Keine Updates nötig.");
+        }
         return clientDoc.id;
       } else {
+        console.log("DEBUG: Neuer Client wird erstellt.");
         const docRef = await addDoc(collection(db, "clients"), {
           ...clientData,
           userId,
@@ -97,7 +108,6 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
     
     setIsProcessing(true);
     try {
-      // 1. Fetch existing orders and clients for context
       const qOrders = query(collection(db, "orders"), where("userId", "==", user.uid), limit(20));
       const qClients = query(collection(db, "clients"), where("userId", "==", user.uid), limit(20));
       
@@ -106,13 +116,13 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
       const existingOrders = snapOrders.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const existingClients = snapClients.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
 
-      // 2. AI Unified Processing
       const result = await processUniversalInput(
         input, 
         existingOrders, 
-        existingClients.map((c: any) => `Client: ${c.name}, Info: ${c.telefon || ''} ${c.email || ''}`).join('\n')
+        existingClients.map((c: any) => `Client: ${c.name}${c.aliases ? ` (Aliase: ${c.aliases.join(', ')})` : ''}, Info: ${c.telefon || ''} ${c.email || ''} ${c.insights || ''}`).join('\n')
       ); 
       
+      setAiResponse(result.text_response); // NEU: Speichere Antwort
       toast(result.text_response, { icon: "🧠" });
 
       if (result.intent === 'query') {
@@ -124,9 +134,24 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
         return;
       }
 
-      // 3. Handle Create Intent
+      if (result.intent === 'crm_update') {
+        await upsertClient(result.client_data, user.uid);
+        setInput("");
+        setIsProcessing(false);
+        return;
+      }
+
+      if (result.intent === 'delete_record' || result.intent === 'merge_clients') {
+        setPendingAction({
+            intent: result.intent,
+            data: result.action_data
+        });
+        setAiResponse(result.text_response);
+        setIsProcessing(false);
+        return;
+      }
+
       if (result.intent === 'create' && result.create_data) {
-        // Invisible CRM Upsert if client data present
         const clientId = await upsertClient(result.client_data, user.uid);
         
         if (result.create_data.duplicate_check?.is_potential_duplicate) {
@@ -145,10 +170,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
 
     } catch (error: any) {
       console.error("AI Unified Processing Error:", error);
-      const errorMessage = error?.message || "Unbekannter Fehler";
-      toast.error(`KI Fehler: ${errorMessage.slice(0, 50)}...`, {
-        description: "Zero-Friction Engine konnte die Eingabe nicht verarbeiten."
-      });
+      toast.error(`KI Fehler: ${error?.message || "Unbekannt"}`);
       setIsProcessing(false);
     }
   };
@@ -176,7 +198,6 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
     try {
       await addDoc(collection(db, "orders"), newOrder);
       
-      // Auto Calendar Sync
       if (autoCalendar && googleToken && newOrder.deadline) {
         try {
           const startDateTime = parseISO(newOrder.deadline);
@@ -240,17 +261,6 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
             <CalendarPlus className="w-3 h-3" /> Im Google Kalender eintragen
           </Label>
         </div>
-        {!googleToken && autoCalendar && (
-           <div className="flex flex-col items-end">
-             <p className="text-[9px] text-orange-400 animate-pulse font-medium">Berechtigung fehlt</p>
-             <button 
-               onClick={(e) => { e.preventDefault(); login(); }} 
-               className="text-[8px] text-blue-400 underline hover:text-blue-300"
-             >
-               Jetzt Kalender freigeben
-             </button>
-           </div>
-        )}
       </div>
 
       <div className="flex items-center gap-3 mt-4">
@@ -282,6 +292,23 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
           )}
         </Button>
       </div>
+
+      {/* KI Antwort Dialog */}
+      <AlertDialog open={!!aiResponse} onOpenChange={() => setAiResponse(null)}>
+        <AlertDialogContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-bento">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-emerald-400 font-bold uppercase tracking-wider text-sm flex items-center gap-2">
+              <Sparkles className="w-4 h-4" /> Analyse-Ergebnis
+            </AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="text-slate-200 text-sm py-4 leading-relaxed whitespace-pre-wrap">
+            {aiResponse}
+          </div>
+          <AlertDialogFooter>
+             <Button onClick={() => setAiResponse(null)} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold">Verstanden</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!duplicateCheck} onOpenChange={() => { setDuplicateCheck(null); setPendingOrder(null); }}>
         <AlertDialogContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-bento max-w-md">
@@ -350,6 +377,88 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
               Vorgang abbrechen
             </Button>
           </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!pendingAction} onOpenChange={() => setPendingAction(null)}>
+        <AlertDialogContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-bento max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-400 font-bold uppercase tracking-wider text-sm flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" /> Sicherheitsabfrage
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400 text-sm leading-relaxed pt-2">
+              {pendingAction?.intent === 'delete_record' 
+                ? `Möchtest du den ${pendingAction?.data.target_type === 'order' ? 'Auftrag' : 'Kunden'} "${pendingAction?.data.primary_name}" wirklich unwiderruflich löschen?`
+                : `Möchtest du "${pendingAction?.data.secondary_name}" wirklich in "${pendingAction?.data.primary_name}" mergen?`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setPendingAction(null)} className="text-slate-400 bg-transparent border-slate-700 hover:bg-slate-800">Abbrechen</Button>
+            <Button 
+                onClick={async () => {
+                    setIsProcessing(true);
+                    try {
+                        const { intent, data } = pendingAction;
+                        const collectionName = data.target_type === 'order' ? 'orders' : 'clients';
+                        
+                        // Finde primary
+                        const searchField = data.target_type === 'order' ? 'title' : 'name';
+                        const qPrimary = query(collection(db, collectionName), where("userId", "==", user!.uid), where(searchField, "==", data.primary_name), limit(1));
+                        const snapPrimary = await getDocs(qPrimary);
+                        
+                        if (snapPrimary.empty) throw new Error("Primärer Eintrag nicht gefunden.");
+                        const primaryDoc = snapPrimary.docs[0];
+
+                        if (intent === 'delete_record') {
+                            await deleteDoc(primaryDoc.ref);
+                            toast.success("Eintrag gelöscht!");
+                        } else if (intent === 'merge_clients') {
+                            const qSecondary = query(collection(db, "clients"), where("userId", "==", user!.uid), where("name", "==", data.secondary_name), limit(1));
+                            const snapSecondary = await getDocs(qSecondary);
+                            
+                            if (snapSecondary.empty) throw new Error("Sekundärer Kunde nicht gefunden.");                
+                            const secondaryDoc = snapSecondary.docs[0];
+                            
+                            // Reassign orders
+                            const qOrders = query(collection(db, "orders"), where("userId", "==", user!.uid), where("clientId", "==", secondaryDoc.id));
+                            const snapOrders = await getDocs(qOrders);
+                            
+                            const batch = writeBatch(db);
+                            snapOrders.docs.forEach(doc => batch.update(doc.ref, { 
+                                clientId: primaryDoc.id, 
+                                clientName: data.primary_name,
+                                updatedAt: serverTimestamp()
+                            }));
+                            
+                            const primaryData = primaryDoc.data();
+                            const newAliases = [...(primaryData.aliases || []), data.secondary_name];
+                            batch.update(primaryDoc.ref, { 
+                                aliases: newAliases,
+                                updatedAt: serverTimestamp() 
+                            });
+
+                            batch.delete(secondaryDoc.ref);
+                            await batch.commit();
+                            
+                            toast.success("Kunden erfolgreich zusammengeführt!");
+                        }
+                        
+                        setInput("");
+                        onOrderCreated();
+                        setPendingAction(null);
+                        setAiResponse(null);
+                    } catch (e: any) {
+                        toast.error(`Fehler: ${e.message}`);
+                    } finally {
+                        setIsProcessing(false);
+                    }
+                }}
+                className="bg-red-600 hover:bg-red-500 text-white font-bold"
+            >
+              Ja, ausführen
+            </Button>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

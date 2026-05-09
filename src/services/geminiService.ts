@@ -3,7 +3,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
 export interface ZeroFrictionResponse {
-  intent: "create" | "query";
+  intent: "create" | "query" | "crm_update" | "delete_record" | "merge_clients";
   text_response: string;
   create_data: {
     type: "order" | "structure" | "callback";
@@ -35,12 +35,17 @@ export interface ZeroFrictionResponse {
     query_type: "order" | "client";
     suggested_ui_action: "call" | "email" | "mark_done" | null;
   } | null;
+  action_data: {
+    target_type: "order" | "client";
+    primary_name: string;
+    secondary_name?: string;
+  } | null;
 }
 
 export const zeroFrictionSchema = {
   type: Type.OBJECT,
   properties: {
-    intent: { type: Type.STRING, enum: ["create", "query"] },
+    intent: { type: Type.STRING, enum: ["create", "query", "crm_update", "delete_record", "merge_clients"] },
     text_response: { type: Type.STRING, description: "Short friendly response text" },
     create_data: {
       type: Type.OBJECT,
@@ -81,7 +86,8 @@ export const zeroFrictionSchema = {
         telefon: { type: Type.STRING, nullable: true },
         email: { type: Type.STRING, nullable: true },
         adresse: { type: Type.STRING, nullable: true },
-        zahlungsinfo: { type: Type.STRING, nullable: true }
+        zahlungsinfo: { type: Type.STRING, nullable: true },
+        insights: { type: Type.STRING, nullable: true, description: "Stimmungs-Radar / Client Insights" }
       },
       required: ["name"]
     },
@@ -94,6 +100,16 @@ export const zeroFrictionSchema = {
         suggested_ui_action: { type: Type.STRING, enum: ["call", "email", "mark_done"], nullable: true }
       },
       required: ["query_type"]
+    },
+    action_data: {
+      type: Type.OBJECT,
+      nullable: true,
+      properties: {
+        target_type: { type: Type.STRING, enum: ["order", "client"] },
+        primary_name: { type: Type.STRING },
+        secondary_name: { type: Type.STRING, nullable: true }
+      },
+      required: ["target_type", "primary_name"]
     }
   },
   required: ["intent", "text_response"]
@@ -143,14 +159,30 @@ export async function mergeOrders(orders: any[]): Promise<any> {
       ${clientCtx}
       
       Instructions:
-      1. Determine intent: 'create' for new entries, 'query' for finding information.
-      2. If intent == 'create':
-         - Fill 'create_data' with type, title, description, and priority.
-         - 'duplicate_check': Search 'Existing database context (Orders)'. If a task with a very similar title OR identical clientName + similar goal exists, set is_potential_duplicate = true.
-         - 'client_data': If phone numbers, emails, addresses, or payment info (PayPal etc) are mentioned, extract them.
-         - 'clientName': Extract the name of the person/company. If mentioned in contact info, use that name.
-      3. If intent == 'query':
-         - If asking for contact details (numbers, mail) of a person, set query_type = 'client'.
+      1. Determine intent: 
+         - 'create' for new actionable tasks (order, structure, callback).
+         - 'query' for finding information.
+         - 'crm_update' for pure customer data updates (phone, email, address) without creating a task.
+         - 'delete_record' to delete an order or client.
+         - 'merge_clients' to merge two clients or aliases.
+
+      2. ALIAS-REGEL (Identitäts-Verknüpfung):
+         Wenn ein Name (z.B. Timo Schenck) UND ein Projektname/Firma (z.B. Malle Prinz) genannt werden, verknüpfe sie im Feld 'clientName' zwingend als: "Name (Alias/Projekt)". Beispiel: "Timo Schenck (Malle Prinz)".
+
+      3. SILENT-UPDATE-REGEL (Reines CRM-Update):
+         Wenn die Eingabe ausschließlich der Aktualisierung von Kundendaten dient (neue Telefonnummer, Adresse, etc), setze intent = 'crm_update' und befüllen nur das 'client_data'-Objekt. Es darf KEIN 'create_data' erstellt werden.
+      
+      4. Wenn intent == 'delete_record' oder 'merge_clients':
+         - Befülle 'action_data' mit 'target_type' ("order" oder "client"), 'primary_name', und ggf. 'secondary_name'.
+
+      5. Wenn intent == 'create' oder 'crm_update':
+         - Fill 'create_data' (nur bei 'create') with type, title, description, and priority.
+         - 'duplicate_check' (nur bei 'create'): Search 'Existing database context (Orders)'. If a task with a very similar title OR identical clientName + similar goal exists, set is_potential_duplicate = true.
+         - 'client_data': Extract contact info if mentioned. Extract ANY subjective feelings, warnings, or mood indicators about the client into 'insights' (Stimmungs-Radar).
+         - 'clientName': Extract the name, conforming to the ALIAS-REGEL if applicable.
+      
+      6. Wenn intent == 'query':
+         - If asking for contact details of a person, set query_type = 'client'.
          - If asking for tasks or filtered lists, set query_type = 'order'.
       
       Always return a valid JSON object matching the requested schema.

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../AuthContext";
 import { db } from "../lib/firebase";
-import { collection, query, where, getDocs, orderBy, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, deleteDoc, doc, writeBatch } from "firebase/firestore";
 import { Badge } from "../components/ui/badge";
-import { CheckCircle2, Clock, ListTodo, AlertCircle, Calendar as CalendarIcon, CalendarCheck, Trash2, Edit } from "lucide-react";
+import { CheckCircle2, Clock, ListTodo, AlertCircle, Calendar as CalendarIcon, CalendarCheck, Trash2, Edit, UserPlus, MoreVertical, Menu } from "lucide-react";
 import { format, parseISO, addDays, isWithinInterval, startOfToday, endOfDay } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "../components/ui/alert-dialog";
@@ -18,6 +18,10 @@ import { cn } from "@/lib/utils";
 import { Search, User } from "lucide-react";
 import { Link } from "react-router-dom";
 import EditOrderDialog from "../components/EditOrderDialog";
+import EditClientDialog from "../components/EditClientDialog";
+import MergeClientDialog from "../components/MergeClientDialog";
+import AppHeader from "../components/AppHeader";
+import MobileMenu from "../components/MobileMenu";
 
 function CalendarEditDialog({ order, onClose, googleToken }: { order: any, onClose: () => void, googleToken: string | null }) {
   const [summary, setSummary] = useState(`${order?.type?.toUpperCase() || ''}: ${order?.title || ''}`);
@@ -98,11 +102,11 @@ function CalendarEditDialog({ order, onClose, googleToken }: { order: any, onClo
 function Header() {
   const { user } = useAuth();
   return (
-    <header className="h-16 bg-slate-950 flex items-center justify-between px-8 border-b border-slate-900">
-      <div className="flex items-center gap-4">
-        <h1 className="text-xl font-bold tracking-tight text-white">
-          AUFTRAGS <span className="text-emerald-400">MONITOR</span> 
-          <span className="text-slate-600 font-normal ml-2">| Dashboard</span>
+    <header className="h-16 bg-slate-950 flex items-center justify-between px-4 md:px-8 border-b border-slate-900">
+      <div className="flex items-center gap-2 md:gap-4">
+        <h1 className="text-lg md:text-xl font-bold tracking-tight text-white flex items-center">
+          <span className="hidden md:inline">AUFTRAGS</span><span className="md:hidden">A</span> <span className="text-emerald-400">MONITOR</span> 
+          <span className="hidden md:inline text-slate-600 font-normal ml-2">| Dashboard</span>
         </h1>
       </div>
       <div className="hidden md:flex items-center bg-slate-900 px-4 py-2 rounded-full w-96 border border-slate-800">
@@ -113,18 +117,21 @@ function Header() {
           className="bg-transparent border-none focus:outline-none text-sm w-full text-slate-300 placeholder-slate-600"
         />
       </div>
-      <div className="flex items-center gap-4">
-        <div className="text-right">
+      <div className="flex items-center gap-3 md:gap-4">
+        <div className="text-right hidden sm:block">
           <p className="text-xs font-bold text-slate-200 uppercase tracking-widest">{user?.displayName?.split(' ')[0]}</p>
           <p className="text-[10px] text-emerald-400">Verbunden</p>
         </div>
         {user?.photoURL ? (
-          <img src={user.photoURL} alt="User" className="w-10 h-10 rounded-full border-2 border-slate-700" />
+          <img src={user.photoURL} alt="User" className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-slate-700" />
         ) : (
-          <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center">
-            <User className="text-slate-400 w-5 h-5" />
+          <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center">
+            <User className="text-slate-400 w-4 h-4 md:w-5 md:h-5" />
           </div>
         )}
+        <button className="p-2 ml-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors md:hidden" onClick={() => toast.info("Navigationsmenü wird bald hinzugefügt.")}>
+          <Menu className="w-6 h-6" />
+        </button>
       </div>
     </header>
   );
@@ -134,12 +141,20 @@ export default function Dashboard() {
   const { user, googleToken } = useAuth();
   const [stats, setStats] = useState({ total: 0, orders: 0, structure: 0, callbacks: 0 });
   const [recentEntries, setRecentEntries] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]); // NEU
   const [loading, setLoading] = useState(true);
   const [detailOrder, setDetailOrder] = useState<any>(null);
   const [detailClient, setDetailClient] = useState<any>(null);
   const [calendarOrder, setCalendarOrder] = useState<any>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [editingOrder, setEditingOrder] = useState<any>(null);
+  
+  const [editingClient, setEditingClient] = useState<any>(null);
+  const [mergingClient, setMergingClient] = useState<any>(null);
+  const [deletingClientId, setDeletingClientId] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const [viewMode, setViewMode] = useState<"orders" | "clients">("orders"); // NEU
 
   useEffect(() => {
     const fetchClient = async () => {
@@ -165,11 +180,15 @@ export default function Dashboard() {
   const fetchData = async () => {
     if (!user) return;
     try {
-      const q = query(collection(db, "orders"), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const qOrders = query(collection(db, "orders"), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
+      const qClients = query(collection(db, "clients"), where("userId", "==", user.uid), orderBy("updatedAt", "desc"));
+      
+      const [snapOrders, snapClients] = await Promise.all([getDocs(qOrders), getDocs(qClients)]);
+      
+      const ordersData = snapOrders.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const clientsData = snapClients.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      const counts = data.reduce((acc: any, curr: any) => {
+      const counts = ordersData.reduce((acc: any, curr: any) => {
         acc.total++;
         if (curr.type === 'order') acc.orders++;
         else if (curr.type === 'structure') acc.structure++;
@@ -178,7 +197,8 @@ export default function Dashboard() {
       }, { total: 0, orders: 0, structure: 0, callbacks: 0 });
 
       setStats(counts);
-      setRecentEntries(data);
+      setRecentEntries(ordersData);
+      setClients(clientsData);
     } catch (error) {
       console.error(error);
     } finally {
@@ -204,6 +224,19 @@ export default function Dashboard() {
     }
   };
 
+  const deleteClient = async (clientId: string) => {
+    try {
+      await deleteDoc(doc(db, "clients", clientId));
+      toast.success("Kunde gelöscht. Hinweis: Zugehörige Aufträge wurden nicht gelöscht.");
+      setDeletingClientId(null);
+      fetchData();
+    } catch (error: any) {
+      console.error("Delete Error:", error);
+      toast.error(`Fehler beim Löschen: ${error?.message || "Unbekannt"}`);
+      setDeletingClientId(null);
+    }
+  };
+
   if (loading) return <div className="h-full flex items-center justify-center text-slate-400">Lade Dashboard...</div>;
 
   const callbacks = recentEntries.filter(e => e.type === 'callback' && e.status !== 'completed');
@@ -212,11 +245,30 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-slate-950">
-      <Header />
+      <AppHeader onMenuClick={() => setIsMobileMenuOpen(true)} />
       
-      <main className="p-6 grid grid-cols-4 gap-6 flex-1 overflow-auto">
+      <MobileMenu isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
+
+      <main className="p-4 md:p-6 flex flex-col gap-4 md:gap-6 flex-1 overflow-auto md:overflow-hidden">
+        <div className="flex bg-slate-900/50 border border-slate-800 p-1 rounded-2xl w-full md:w-fit mx-auto md:mx-0 shrink-0">
+          <button 
+            onClick={() => setViewMode('orders')} 
+            className={cn("flex-1 md:flex-none px-6 md:px-8 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all", viewMode === 'orders' ? "bg-emerald-500/10 text-emerald-400" : "text-slate-500 hover:text-slate-300")}
+          >
+            Aufträge
+          </button>
+          <button 
+            onClick={() => setViewMode('clients')} 
+            className={cn("flex-1 md:flex-none px-6 md:px-8 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all", viewMode === 'clients' ? "bg-blue-500/10 text-blue-400" : "text-slate-500 hover:text-slate-300")}
+          >
+            Kunden
+          </button>
+        </div>
+
+        {viewMode === 'orders' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 md:overflow-auto pb-6">
         {/* Bento: Stats Row */}
-        <div className="col-span-2 row-span-1 bento-gradient flex flex-col justify-between">
+        <div className="col-span-1 md:col-span-2 lg:col-span-2 lg:row-span-1 bento-gradient flex flex-col justify-between p-5 md:p-6">
           <div>
             <h3 className="text-emerald-400 font-semibold mb-1 uppercase text-xs tracking-wider">Übersicht</h3>
             <p className="text-2xl font-light text-white italic">Alles im Griff.</p>
@@ -234,7 +286,7 @@ export default function Dashboard() {
         </div>
 
         {/* Bento: Urgent Callbacks */}
-        <div className="col-span-1 row-span-1 bento-card border-orange-500/20">
+        <div className="col-span-1 row-span-1 bento-card border-orange-500/20 p-5 md:p-6">
           <h3 className="text-orange-400 font-semibold mb-4 uppercase text-xs tracking-wider flex items-center gap-2">
             <Clock className="w-3 h-3" /> Rückrufe
           </h3>
@@ -256,7 +308,7 @@ export default function Dashboard() {
         </div>
 
         {/* Bento: New Item Action */}
-        <div className="col-span-1 row-span-1 bento-card flex flex-col justify-between">
+        <div className="col-span-1 row-span-1 bento-card flex flex-col justify-between p-5 md:p-6">
           <h3 className="text-blue-400 font-semibold mb-4 uppercase text-xs tracking-wider">Aktion</h3>
           <Link to="/orders" className="w-full py-4 bg-slate-100 text-slate-950 text-xs font-black rounded-2xl hover:bg-white transition-all text-center shadow-xl">
             SCHNELLERFASSUNG
@@ -264,7 +316,7 @@ export default function Dashboard() {
         </div>
 
         {/* Bento: Active Orders Table */}
-         <div className="col-span-2 row-span-2 bento-card p-0 flex flex-col overflow-hidden">
+         <div className="col-span-1 md:col-span-2 lg:col-span-2 lg:row-span-2 bento-card p-0 flex flex-col overflow-hidden min-h-[300px]">
           <div className="px-6 py-4 bg-slate-900/50 border-b border-slate-800 flex justify-between items-center">
             <h3 className="text-white font-bold flex items-center gap-2">
               <ListTodo className="w-4 h-4 text-emerald-400" /> Aktive Projekte
@@ -303,7 +355,7 @@ export default function Dashboard() {
         </div>
 
         {/* Bento: 3-Day Calendar */}
-        <div className="col-span-1 row-span-2 bento-card p-0 flex flex-col overflow-hidden border-emerald-500/20">
+        <div className="col-span-1 lg:row-span-2 bento-card p-0 flex flex-col overflow-hidden border-emerald-500/20 min-h-[300px]">
           <div className="p-4 border-b border-slate-800">
             <h3 className="text-emerald-400 font-semibold uppercase text-xs tracking-wider flex items-center gap-2">
               <CalendarIcon className="w-3 h-3" /> Nächste 3 Tage
@@ -331,7 +383,7 @@ export default function Dashboard() {
         </div>
 
         {/* Bento: Structure / Tasks */}
-        <div className="col-span-1 row-span-2 bento-card p-0 flex flex-col overflow-hidden border-blue-500/20">
+        <div className="col-span-1 lg:row-span-2 bento-card p-0 flex flex-col overflow-hidden border-blue-500/20 min-h-[300px]">
           <div className="p-4 border-b border-slate-800">
             <h3 className="text-blue-400 font-semibold uppercase text-xs tracking-wider flex items-center gap-2">
               <AlertCircle className="w-3 h-3" /> Interne Struktur
@@ -352,6 +404,89 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+        </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-auto pb-6">
+            {clients.map(client => (
+              <div key={client.id} className="bento-card border-blue-500/20 flex flex-col">
+                 <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-100">{client.name}</h3>
+                      {client.aliases && client.aliases.length > 0 && (
+                        <p className="text-xs text-slate-400 mt-1 italic">
+                          Aliase: {client.aliases.join(", ")}
+                        </p>
+                      )}
+                    </div>
+                    <Badge variant="outline" className="border-blue-500/30 text-blue-400">
+                      Client
+                    </Badge>
+                 </div>
+                 
+                 <div className="space-y-2 mb-4 flex-1">
+                    {client.telefon && (
+                      <p className="text-xs text-slate-300 flex items-center gap-2">
+                        📞 {client.telefon}
+                      </p>
+                    )}
+                    {client.email && (
+                      <p className="text-xs text-slate-300 flex items-center gap-2">
+                        ✉️ {client.email}
+                      </p>
+                    )}
+                    {client.adresse && (
+                      <p className="text-xs text-slate-300 flex items-center gap-2 text-wrap">
+                        📍 {client.adresse}
+                      </p>
+                    )}
+                 </div>
+
+                 {client.insights ? (
+                   <div className="mt-auto bg-slate-950/50 p-3 rounded-xl border border-slate-800">
+                     <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">Stimmungs-Radar</p>
+                     <p className="text-xs text-slate-400 italic line-clamp-3">{client.insights}</p>
+                   </div>
+                 ) : (
+                   <div className="mt-auto bg-slate-950/50 p-3 rounded-xl border border-slate-800">
+                     <p className="text-[10px] text-slate-600 italic">Noch keine Insights gesammelt.</p>
+                   </div>
+                 )}
+
+                 <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-slate-800/50">
+                   <Button 
+                     variant="ghost" 
+                     size="sm" 
+                     className="h-8 text-xs text-slate-500 hover:text-red-400 hover:bg-red-400/10 px-2"
+                     onClick={(e) => { e.stopPropagation(); setDeletingClientId(client.id); }}
+                   >
+                     <Trash2 className="w-3 h-3 mr-1" /> Löschen
+                   </Button>
+                   <Button 
+                     variant="ghost" 
+                     size="sm" 
+                     className="h-8 text-xs text-slate-500 hover:text-orange-400 hover:bg-orange-400/10 px-2"
+                     onClick={(e) => { e.stopPropagation(); setMergingClient(client); }}
+                   >
+                     <UserPlus className="w-3 h-3 mr-1" /> Merge
+                   </Button>
+                   <Button 
+                     variant="ghost" 
+                     size="sm" 
+                     className="h-8 text-xs text-slate-500 hover:text-blue-400 hover:bg-blue-400/10 px-2"
+                     onClick={(e) => { e.stopPropagation(); setEditingClient(client); }}
+                   >
+                     <Edit className="w-3 h-3 mr-1" /> Bearbeiten
+                   </Button>
+                 </div>
+              </div>
+            ))}
+            {clients.length === 0 && (
+              <div className="col-span-full h-40 flex items-center justify-center text-slate-500">
+                Keine Kunden gefunden
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Detail Dialog */}
         <Dialog open={!!detailOrder} onOpenChange={() => setDetailOrder(null)}>
@@ -477,6 +612,39 @@ export default function Dashboard() {
             onUpdated={fetchData}
           />
         )}
+
+        {/* Client Dialogs */}
+        {editingClient && (
+          <EditClientDialog 
+            client={editingClient}
+            onClose={() => setEditingClient(null)}
+            onUpdated={fetchData}
+          />
+        )}
+
+        {mergingClient && (
+          <MergeClientDialog
+            client={mergingClient}
+            allClients={clients}
+            onClose={() => setMergingClient(null)}
+            onUpdated={fetchData}
+          />
+        )}
+
+        <AlertDialog open={!!deletingClientId} onOpenChange={(open) => !open && setDeletingClientId(null)}>
+          <AlertDialogContent className="bg-slate-900 border-slate-800 text-slate-200">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-white">Kunde löschen?</AlertDialogTitle>
+              <AlertDialogDescription className="text-slate-400">
+                Möchtest du dieses Kundenprofil wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden, Aufträge bleiben jedoch ohne Profilzuweisung bestehen.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel variant="outline" size="default" className="bg-slate-800 border-slate-700 text-white hover:bg-slate-700 hover:text-white">Abbrechen</AlertDialogCancel>
+              <AlertDialogAction onClick={() => deletingClientId && deleteClient(deletingClientId)} className="bg-red-600 text-white hover:bg-red-500">Kunde löschen</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {/* Calendar Edit Dialog */}
         {calendarOrder && (

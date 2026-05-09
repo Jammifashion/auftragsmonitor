@@ -20,6 +20,8 @@ import { toast } from "sonner";
 import { createGoogleCalendarEvent } from "../services/calendarService";
 import { mergeOrders } from "../services/geminiService";
 import EditOrderDialog from "../components/EditOrderDialog";
+import AppHeader from "../components/AppHeader";
+import MobileMenu from "../components/MobileMenu";
 
 function CalendarEditDialog({ order, onClose, googleToken }: { order: any, onClose: () => void, googleToken: string | null }) {
   const [summary, setSummary] = useState(`${order?.type?.toUpperCase() || ''}: ${order?.title || ''}`);
@@ -146,6 +148,7 @@ export default function Orders() {
   const [detailOrder, setDetailOrder] = useState<any>(null);
   const [detailClient, setDetailClient] = useState<any>(null);
   const [calendarOrder, setCalendarOrder] = useState<any>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const fetchClient = async () => {
@@ -302,14 +305,11 @@ export default function Orders() {
 
   return (
     <div className="flex flex-col h-full bg-slate-950 overflow-hidden">
-      <header className="h-16 bg-slate-950 flex items-center justify-between px-8 border-b border-slate-900 shrink-0">
-        <h1 className="text-xl font-bold tracking-tight text-white uppercase">VERWALTUNG</h1>
-        <div className="px-4 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-           <p className="text-[10px] font-bold text-emerald-400 tracking-widest uppercase">Data Secure</p>
-        </div>
-      </header>
+      <AppHeader onMenuClick={() => setIsMobileMenuOpen(true)} />
+      
+      <MobileMenu isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
 
-      <div className="flex-1 overflow-auto p-8 space-y-12">
+      <div className="flex-1 overflow-auto p-4 md:p-8 space-y-8 md:space-y-12">
         <section className="max-w-4xl mx-auto">
           <OrderInput onOrderCreated={fetchOrders} onQuery={handleQuery} />
         </section>

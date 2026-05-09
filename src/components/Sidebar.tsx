@@ -14,7 +14,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-20 bg-slate-900 border-r border-slate-800 flex flex-col items-center py-8 z-50">
+    <aside className="hidden md:flex fixed left-0 top-0 h-screen w-20 bg-slate-900 border-r border-slate-800 flex-col items-center py-8 z-50">
       <div className="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center text-slate-950 shadow-lg shadow-emerald-500/20 mb-12">
         <Zap className="w-6 h-6 fill-current" />
       </div>
