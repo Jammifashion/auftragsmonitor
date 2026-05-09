@@ -1,32 +1,50 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-    
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isValidOrder(data) {
-      return data.title is string && data.title.size() > 0 &&
-             data.client is string &&
-             data.status in ['pending', 'in_progress', 'completed', 'cancelled'] &&
-             data.userId == request.auth.uid;
-    }
-
-    // Default deny
+    // Global Deny
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Orders collection
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isWhitelisted() {
+      return isSignedIn() && 
+             (request.auth.token.email == 'gbr@jammifashion.de' || request.auth.token.email == 'jammitoo@gmail.com') &&
+             request.auth.token.email_verified == true;
+    }
+    
+    function isOwner(userId) {
+      return isWhitelisted() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
+    // Orders Collection
     match /orders/{orderId} {
-      allow read, list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && isValidOrder(request.resource.data) && request.resource.data.createdAt == request.time;
-      allow update: if isOwner(resource.data.userId) && isValidOrder(request.resource.data) && request.resource.data.updatedAt == request.time;
+      allow read, list: if isOwner(resource.data.userId);
+      allow create: if isWhitelisted() && 
+                      request.resource.data.userId == request.auth.uid &&
+                      request.resource.data.title is string &&
+                      request.resource.data.type in ['order', 'structure', 'callback'] &&
+                      request.resource.data.createdAt == request.time;
+      allow update: if isOwner(resource.data.userId) && 
+                      request.resource.data.updatedAt == request.time;
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    // Clients Collection (CRM)
+    match /clients/{clientId} {
+      allow read, list: if isOwner(resource.data.userId);
+      allow create: if isWhitelisted() && 
+                      request.resource.data.userId == request.auth.uid &&
+                      request.resource.data.name is string;
+      allow update: if isOwner(resource.data.userId) && 
+                      request.resource.data.updatedAt == request.time;
       allow delete: if isOwner(resource.data.userId);
     }
   }

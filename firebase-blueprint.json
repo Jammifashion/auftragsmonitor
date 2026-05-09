@@ -2,35 +2,61 @@
   "entities": {
     "Order": {
       "title": "Order",
-      "description": "Represents a customer order or task.",
+      "description": "Represents a customer order, internal structure task, or callback.",
       "type": "object",
       "properties": {
-        "title": { "type": "string", "description": "Short title of the order" },
-        "client": { "type": "string", "description": "Customer name or reference" },
-        "description": { "type": "string", "description": "Detailed description of the task" },
-        "deadline": { "type": "string", "format": "date-time", "description": "When the order is due" },
+        "title": { "type": "string", "description": "Short title of the entry" },
+        "clientId": { "type": "string", "description": "Reference to the client document ID" },
+        "clientName": { "type": "string", "description": "Redundant customer name for fast display" },
+        "description": { "type": "string", "description": "Detailed description or task content" },
+        "deadline": { "type": "string", "format": "date-time", "description": "When it is due" },
+        "type": {
+          "type": "string",
+          "enum": ["order", "structure", "callback"],
+          "description": "The category of this entry"
+        },
         "status": {
           "type": "string",
           "enum": ["pending", "in_progress", "completed", "cancelled"],
-          "description": "Current status of the order"
+          "description": "Current status"
         },
         "priority": {
           "type": "string",
           "enum": ["low", "medium", "high"],
-          "description": "Urgency of the order"
+          "description": "Urgency level"
         },
-        "rawInput": { "type": "string", "description": "The original input text/transcript" },
+        "structured_details": { "type": "object", "description": "Bento-style structured info" },
+        "rawInput": { "type": "string", "description": "Original input text" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" },
-        "userId": { "type": "string", "description": "Owner of the order" }
+        "userId": { "type": "string", "description": "Owner ID" }
       },
-      "required": ["title", "client", "status", "userId", "createdAt"]
+      "required": ["title", "status", "type", "userId", "createdAt"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Customer contact information (CRM).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "telefon": { "type": "string", "nullable": true },
+        "email": { "type": "string", "nullable": true },
+        "adresse": { "type": "string", "nullable": true },
+        "zahlungsinfo": { "type": "string", "nullable": true },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": ["name", "userId", "updatedAt"]
     }
   },
   "firestore": {
     "orders": {
       "schema": "Order",
       "description": "Collection of all customer orders."
+    },
+    "clients": {
+       "schema": "Client",
+       "description": "Invisible CRM collection."
     }
   }
 }
