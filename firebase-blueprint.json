@@ -1,0 +1,36 @@
+{
+  "entities": {
+    "Order": {
+      "title": "Order",
+      "description": "Represents a customer order or task.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Short title of the order" },
+        "client": { "type": "string", "description": "Customer name or reference" },
+        "description": { "type": "string", "description": "Detailed description of the task" },
+        "deadline": { "type": "string", "format": "date-time", "description": "When the order is due" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "in_progress", "completed", "cancelled"],
+          "description": "Current status of the order"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "Urgency of the order"
+        },
+        "rawInput": { "type": "string", "description": "The original input text/transcript" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string", "description": "Owner of the order" }
+      },
+      "required": ["title", "client", "status", "userId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "orders": {
+      "schema": "Order",
+      "description": "Collection of all customer orders."
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "projectId": "auftragsmonitor",
+  "appId": "1:635538332311:web:a109b67722f4bcc5fc67d2",
+  "apiKey": "AIzaSyB606nD2MXNh6unAk30Xy0iW-gkAZfB_kk",
+  "authDomain": "auftragsmonitor.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-f1e8c584-1c40-4546-b0e4-50b8145eee1d",
+  "storageBucket": "auftragsmonitor.firebasestorage.app",
+  "messagingSenderId": "635538332311",
+  "measurementId": ""
+}
