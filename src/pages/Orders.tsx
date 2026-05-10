@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../AuthContext";
 import { db } from "../lib/firebase";
-import { collection, query, where, getDocs, orderBy, updateDoc, doc, deleteDoc, serverTimestamp, addDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, getDoc, orderBy, updateDoc, doc, deleteDoc, serverTimestamp, addDoc } from "firebase/firestore";
 import OrderInput from "../components/OrderInput";
 import { useLocation } from "react-router-dom";
 import { Card, CardContent } from "../components/ui/card";
@@ -157,6 +157,7 @@ export default function Orders() {
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [editingOrder, setEditingOrder] = useState<any>(null);
   const [typeFilter, setTypeFilter] = useState<'all' | 'order' | 'aufgabe' | 'idee' | 'callback'>('all');
+  const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
     if (location.state?.filter) {
@@ -197,9 +198,26 @@ export default function Orders() {
     if (!user) return;
     setLoading(true);
     try {
+      const settingsSnap = await getDoc(doc(db, "users", user.uid));
+      let settings = {};
+      if (settingsSnap.exists()) {
+         settings = settingsSnap.data();
+      }
+
       const q = query(collection(db, "orders"), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+      
+      if ((settings as any).autoArchive) {
+         data = data.filter(o => {
+            if (o.status !== 'completed') return true;
+            if (!o.updatedAt) return true;
+            const updatedDate = o.updatedAt.toDate ? o.updatedAt.toDate() : new Date(o.updatedAt);
+            const daysDiff = (new Date().getTime() - updatedDate.getTime()) / (1000 * 60 * 60 * 24);
+            return daysDiff < 30;
+         });
+      }
+
       setOrders(data);
       applyFilter(data, queryState, typeFilter);
     } catch (error) {
@@ -216,13 +234,17 @@ export default function Orders() {
 
   useEffect(() => {
     applyFilter(orders, queryState, typeFilter);
-  }, [typeFilter, queryState, orders]);
+  }, [typeFilter, queryState, orders, showCompleted]);
 
   const applyFilter = (data: any[], qState: any, tFilter: string) => {
     let result = [...data];
 
     if (tFilter !== 'all') {
       result = result.filter(o => o.type === tFilter);
+    }
+
+    if (!showCompleted) {
+      result = result.filter(o => o.status !== 'completed');
     }
 
     if (!qState) {
@@ -337,21 +359,34 @@ export default function Orders() {
               <p className="text-xs text-slate-600">{filteredOrders.length} Aufträge gefunden</p>
             </div>
             
-            <div className="flex bg-slate-900 p-1 rounded-xl w-fit flex-wrap">
-              {(['all', 'order', 'aufgabe', 'idee', 'callback'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setTypeFilter(tab)}
-                  className={cn(
-                    "px-4 py-1.5 rounded-lg text-xs font-bold tracking-widest uppercase transition-all duration-300",
-                    typeFilter === tab 
-                      ? "bg-emerald-600 text-white shadow-md" 
-                      : "text-slate-500 hover:text-slate-300"
-                  )}
-                >
-                  {tab === 'all' ? 'Alle' : tab}
-                </button>
-              ))}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex bg-slate-900 p-1 rounded-xl w-fit flex-wrap">
+                {(['all', 'order', 'aufgabe', 'idee', 'callback'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setTypeFilter(tab)}
+                    className={cn(
+                      "px-4 py-1.5 rounded-lg text-xs font-bold tracking-widest uppercase transition-all duration-300",
+                      typeFilter === tab 
+                        ? "bg-emerald-600 text-white shadow-md" 
+                        : "text-slate-500 hover:text-slate-300"
+                    )}
+                  >
+                    {tab === 'all' ? 'Alle' : tab}
+                  </button>
+                ))}
+              </div>
+              <button 
+                onClick={() => setShowCompleted(!showCompleted)}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-xs font-bold transition-all border",
+                  showCompleted 
+                    ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-400"
+                    : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300 hover:border-slate-700"
+                )}
+              >
+                {showCompleted ? "Erledigte ausblenden" : "Erledigte einblenden"}
+              </button>
             </div>
           </div>
           

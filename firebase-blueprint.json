@@ -47,6 +47,19 @@
         "userId": { "type": "string" }
       },
       "required": ["name", "userId", "updatedAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User specific settings.",
+      "type": "object",
+      "properties": {
+        "theme": { "type": "string" },
+        "accent": { "type": "string" },
+        "toneOfVoice": { "type": "string" },
+        "recognitionLanguage": { "type": "string" },
+        "defaultDeadline": { "type": "string" },
+        "autoArchive": { "type": "boolean" }
+      }
     }
   },
   "firestore": {
@@ -57,6 +70,10 @@
     "clients": {
        "schema": "Client",
        "description": "Invisible CRM collection."
+    },
+    "users": {
+       "schema": "User",
+       "description": "User specific settings."
     }
   }
 }

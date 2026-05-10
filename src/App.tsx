@@ -7,6 +7,8 @@ import Orders from "./pages/Orders";
 import Login from "./pages/Login";
 import Sidebar from "./components/Sidebar";
 
+import Settings from "./pages/Settings";
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="h-screen w-screen flex items-center justify-center bg-slate-950 text-slate-400">Lade...</div>;
@@ -29,6 +31,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </BrowserRouter>

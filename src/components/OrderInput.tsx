@@ -1,11 +1,11 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Mic, Send, Sparkles, Loader2, StopCircle, CalendarPlus, AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { processUniversalInput } from "../services/geminiService";
 import { toast } from "sonner";
 import { db } from "../lib/firebase";
-import { collection, addDoc, getDocs, query, where, serverTimestamp, doc, updateDoc, limit, deleteDoc, writeBatch } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, where, serverTimestamp, doc, updateDoc, limit, deleteDoc, writeBatch, getDoc } from "firebase/firestore";
 import { useAuth } from "../AuthContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { cn } from "@/lib/utils";
@@ -22,10 +22,26 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
   const [autoCalendar, setAutoCalendar] = useState(false);
   const [duplicateCheck, setDuplicateCheck] = useState<{ isDuplicate: boolean; similarOrderId?: string; reason?: string } | null>(null);
   const [pendingOrder, setPendingOrder] = useState<any>(null);
-  const [pendingAction, setPendingAction] = useState<any>(null); // NEU
-  const [aiResponse, setAiResponse] = useState<string | null>(null); // State für die Antwort
+  const [pendingAction, setPendingAction] = useState<any>(null);
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [userSettings, setUserSettings] = useState<any>({});
   
   const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      if (!user) return;
+      try {
+        const docSnap = await getDoc(doc(db, "users", user.uid));
+        if (docSnap.exists()) {
+          setUserSettings(docSnap.data());
+        }
+      } catch (e) {
+        console.error("Error fetching settings:", e);
+      }
+    };
+    fetchSettings();
+  }, [user]);
 
   const startListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -35,7 +51,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
     }
 
     recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.lang = 'de-DE';
+    recognitionRef.current.lang = userSettings.recognitionLanguage || 'de-DE';
     recognitionRef.current.continuous = false;
     
     recognitionRef.current.onstart = () => setIsListening(true);
@@ -142,7 +158,8 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
       const result = await processUniversalInput(
         input, 
         existingOrders, 
-        existingClients.map((c: any) => `Client: ${c.name}${c.aliases ? ` (Aliase: ${c.aliases.join(', ')})` : ''}, Info: ${c.telefon || ''} ${c.email || ''} ${c.insights || ''}`).join('\n')
+        existingClients.map((c: any) => `Client: ${c.name}${c.aliases ? ` (Aliase: ${c.aliases.join(', ')})` : ''}, Info: ${c.telefon || ''} ${c.email || ''} ${c.insights || ''}`).join('\n'),
+        userSettings
       ); 
       
       setAiResponse(result.text_response); // NEU: Speichere Antwort

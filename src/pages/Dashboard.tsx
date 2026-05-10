@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../AuthContext";
 import { db } from "../lib/firebase";
-import { collection, query, where, getDocs, orderBy, deleteDoc, doc, writeBatch, updateDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, getDoc, orderBy, deleteDoc, doc, writeBatch, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Badge } from "../components/ui/badge";
 import { CheckCircle2, Clock, ListTodo, AlertCircle, Calendar as CalendarIcon, CalendarCheck, Trash2, Edit, UserPlus, MoreVertical, Menu } from "lucide-react";
 import { format, parseISO, addDays, isWithinInterval, startOfToday, endOfDay } from "date-fns";
@@ -178,24 +178,46 @@ export default function Dashboard() {
     fetchClient();
   }, [detailOrder]);
 
+  const [userSettings, setUserSettings] = useState<any>({});
+
   const fetchData = async () => {
     if (!user) return;
     try {
+      // First get settings
+      const settingsSnap = await getDoc(doc(db, "users", user.uid));
+      let settings = {};
+      if (settingsSnap.exists()) {
+         settings = settingsSnap.data();
+         setUserSettings(settings);
+      }
+
       const qOrders = query(collection(db, "orders"), where("userId", "==", user.uid), orderBy("createdAt", "desc"));
       const qClients = query(collection(db, "clients"), where("userId", "==", user.uid), orderBy("updatedAt", "desc"));
       
       const [snapOrders, snapClients] = await Promise.all([getDocs(qOrders), getDocs(qClients)]);
       
-      const ordersData = snapOrders.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const clientsData = snapClients.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let ordersData = snapOrders.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+      const clientsData = snapClients.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+
+      if ((settings as any).autoArchive) {
+         ordersData = ordersData.filter(o => {
+            if (o.status !== 'completed') return true;
+            if (!o.updatedAt) return true;
+            const updatedDate = o.updatedAt.toDate ? o.updatedAt.toDate() : new Date(o.updatedAt);
+            const daysDiff = (new Date().getTime() - updatedDate.getTime()) / (1000 * 60 * 60 * 24);
+            return daysDiff < 30; // only keep completed if they were completed less than 30 days ago
+         });
+      }
 
       const counts = ordersData.reduce((acc: any, curr: any) => {
-        acc.total++;
-        if (curr.type === 'order') acc.orders++;
-        else if (curr.type === 'aufgabe') acc.aufgaben++;
-        else if (curr.type === 'idee') acc.ideen++;
-        else if (curr.type === 'callback') acc.callbacks++;
-        else if (curr.type === 'structure') acc.structure++;
+        if (curr.status !== 'completed') {
+          acc.total++;
+          if (curr.type === 'order') acc.orders++;
+          else if (curr.type === 'aufgabe') acc.aufgaben++;
+          else if (curr.type === 'idee') acc.ideen++;
+          else if (curr.type === 'callback') acc.callbacks++;
+          else if (curr.type === 'structure') acc.structure++;
+        }
         return acc;
       }, { total: 0, orders: 0, aufgaben: 0, ideen: 0, callbacks: 0, structure: 0 });
 
@@ -257,9 +279,9 @@ export default function Dashboard() {
   if (loading) return <div className="h-full flex items-center justify-center text-slate-400">Lade Dashboard...</div>;
 
   const callbacks = recentEntries.filter(e => e.type === 'callback' && e.status !== 'completed');
-  const structure = recentEntries.filter(e => e.type === 'structure' || e.type === 'idee');
-  const aufgaben = recentEntries.filter(e => e.type === 'aufgabe');
-  const orders = recentEntries.filter(e => e.type === 'order');
+  const structure = recentEntries.filter(e => (e.type === 'structure' || e.type === 'idee') && e.status !== 'completed');
+  const aufgaben = recentEntries.filter(e => e.type === 'aufgabe' && e.status !== 'completed');
+  const orders = recentEntries.filter(e => e.type === 'order' && e.status !== 'completed');
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-slate-950">

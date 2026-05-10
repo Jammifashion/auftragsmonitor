@@ -47,5 +47,10 @@ service cloud.firestore {
                       request.resource.data.updatedAt == request.time;
       allow delete: if isOwner(resource.data.userId);
     }
+
+    // Users Collection (Settings)
+    match /users/{userId} {
+      allow read, write: if isWhitelisted() && request.auth.uid == userId;
+    }
   }
 }

@@ -140,11 +140,28 @@ export async function mergeOrders(orders: any[]): Promise<any> {
     return JSON.parse(result.text);
   }
   
-  export async function processUniversalInput(input: string, existingOrders: any[], clientCtx: string = ""): Promise<ZeroFrictionResponse> {
+  export async function processUniversalInput(input: string, existingOrders: any[], clientCtx: string = "", userSettings?: any): Promise<ZeroFrictionResponse> {
     const model = "gemini-2.5-flash";
     
     const ctx = existingOrders.map(o => `ID: ${o.id}, Title: ${o.title}, Client: ${o.clientName || ''}, Type: ${o.type}`).join('\n');
     const today = new Date().toISOString().split('T')[0];
+
+    const toneOfVoice = userSettings?.toneOfVoice || "business";
+    const defaultDeadline = userSettings?.defaultDeadline || "7";
+
+    let specificToneInstructions = "Antworte professionell und geschäftlich.";
+    if (toneOfVoice === "business") {
+       specificToneInstructions = "Antworte professionell, höflich und strikt geschäftlich.";
+    } else if (toneOfVoice === "short") {
+       specificToneInstructions = "Antworte extrem kurz, knackig und direkt. Keine Füllwörter.";
+    } else if (toneOfVoice === "humorous") {
+       specificToneInstructions = "Antworte locker, humorvoll und mit einem leichten Augenzwinkern.";
+    }
+
+    let deadlineInstructions = "";
+    if (defaultDeadline !== "none") {
+        deadlineInstructions = `Wenn der Nutzer keine spezifische Zeit oder Frist (Deadline) nennt, setze die 'deadline' standardmäßig auf exakt in ${defaultDeadline} Tagen von heute.`;
+    }
   
     const prompt = `
       You are an expert assistant for a small business. Your primary language is German.
@@ -169,6 +186,7 @@ export async function mergeOrders(orders: any[]): Promise<any> {
          - 'query' for finding information.
          - 'crm_update' for pure customer data updates (phone, email, address) without creating a task.
          - 'delete_record' to delete an order or client.
+         - 'mark_completed' to mark a task/order as done.
          - 'merge_clients' to merge two clients or aliases.
 
       2. ALIAS-REGEL (Identitäts-Verknüpfung):
@@ -187,11 +205,15 @@ export async function mergeOrders(orders: any[]): Promise<any> {
          - 'duplicate_check' (nur bei 'create'): Search 'Existing database context (Orders)'. If a task with a very similar title OR identical clientName + similar goal exists, set is_potential_duplicate = true.
          - 'client_data': Extract contact info if mentioned. Extract ANY subjective feelings, warnings, or mood indicators about the client into 'insights' (Stimmungs-Radar).
          - 'clientName': Extract the name, conforming to the ALIAS-REGEL if applicable.
+         - ${deadlineInstructions}
       
       6. Wenn intent == 'query':
          - If asking for contact details of a person, set query_type = 'client'.
          - If asking for tasks or filtered lists, set query_type = 'order'.
       
+      7. Tone of Voice:
+         - Für das Feld 'text_response': ${specificToneInstructions}
+         
       Always return a valid JSON object matching the requested schema.
     `;
   
