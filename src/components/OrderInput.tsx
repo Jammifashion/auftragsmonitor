@@ -9,7 +9,7 @@ import { collection, addDoc, getDocs, query, where, serverTimestamp, doc, update
 import { useAuth } from "../AuthContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { createGoogleCalendarEvent } from "../services/calendarService";
+import { createGoogleCalendarEvent, createGoogleTask } from "../services/calendarService";
 import { parseISO, addHours } from "date-fns";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
@@ -59,13 +59,30 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
     if (!clientData || !clientData.name) return null;
     console.log("DEBUG: Upsert-Versuch für Cliente:", clientData); // LOG
     try {
+      // 1. Suche nach exaktem Namens-Match
       const q = query(
         collection(db, "clients"), 
         where("userId", "==", userId), 
         where("name", "==", clientData.name),
         limit(1)
       );
-      const snap = await getDocs(q);
+      let snap = await getDocs(q);
+      
+      // 2. Fallback: Suche in Aliase oder Teil-Match
+      if (snap.empty) {
+        const qAll = query(collection(db, "clients"), where("userId", "==", userId));
+        const allClientsSnap = await getDocs(qAll);
+        const match = allClientsSnap.docs.find(doc => {
+           const d = doc.data();
+           const nameMatch = d.name.toLowerCase() === clientData.name.toLowerCase();
+           const aliasMatch = d.aliases?.some((a: string) => a.toLowerCase() === clientData.name.toLowerCase());
+           return nameMatch || aliasMatch;
+        });
+        if (match) {
+           snap = { empty: false, docs: [match] } as any;
+        }
+      }
+
       const now = serverTimestamp();
       
       if (!snap.empty) {
@@ -80,21 +97,27 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
         if (clientData.email && clientData.email !== existing.email) { update.email = clientData.email; hasChanges = true; }
         if (clientData.adresse && clientData.adresse !== existing.adresse) { update.adresse = clientData.adresse; hasChanges = true; }
         if (clientData.zahlungsinfo && clientData.zahlungsinfo !== existing.zahlungsinfo) { update.zahlungsinfo = clientData.zahlungsinfo; hasChanges = true; }
+        if (clientData.insights && clientData.insights !== existing.insights) { update.insights = clientData.insights; hasChanges = true; }
         
         if (hasChanges) {
            console.log("DEBUG: Update wird durchgeführt:", update);
            await updateDoc(clientDoc.ref, update);
-        } else {
-           console.log("DEBUG: Keine Updates nötig.");
         }
         return clientDoc.id;
       } else {
         console.log("DEBUG: Neuer Client wird erstellt.");
-        const docRef = await addDoc(collection(db, "clients"), {
-          ...clientData,
-          userId,
+        const newClientData = {
+          name: String(clientData.name),
+          telefon: clientData.telefon || null,
+          email: clientData.email || null,
+          adresse: clientData.adresse || null,
+          zahlungsinfo: clientData.zahlungsinfo || null,
+          insights: clientData.insights || null,
+          userId: userId,
+          createdAt: now,
           updatedAt: now
-        });
+        };
+        const docRef = await addDoc(collection(db, "clients"), newClientData);
         return docRef.id;
       }
     } catch (e) {
@@ -141,7 +164,20 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
         return;
       }
 
-      if (result.intent === 'delete_record' || result.intent === 'merge_clients') {
+      if (result.intent === 'delete_record' || result.intent === 'merge_clients' || result.intent === 'mark_completed') {
+        if (result.intent === 'mark_completed') {
+            const searchField = 'title';
+            const q = query(collection(db, "orders"), where("userId", "==", user!.uid), where(searchField, "==", result.action_data?.primary_name), limit(1));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+                await updateDoc(snap.docs[0].ref, { status: 'completed', updatedAt: serverTimestamp() });
+                toast.success(`"${result.action_data?.primary_name}" wurde als erledigt markiert!`);
+                setInput("");
+                onOrderCreated();
+                setIsProcessing(false);
+                return;
+            }
+        }
         setPendingAction({
             intent: result.intent,
             data: result.action_data
@@ -151,21 +187,31 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
         return;
       }
 
-      if (result.intent === 'create' && result.create_data) {
+      if (result.intent === 'create' && result.create_data && Array.isArray(result.create_data)) {
         const clientId = await upsertClient(result.client_data, user.uid);
         
-        if (result.create_data.duplicate_check?.is_potential_duplicate) {
+        const duplicates = result.create_data.filter((d: any) => d.duplicate_check?.is_potential_duplicate);
+        const novel = result.create_data.filter((d: any) => !d.duplicate_check?.is_potential_duplicate);
+
+        for (const orderData of novel) {
+          await executeCreateOrder(rawInputToOrderData(orderData, input, user.uid, clientId));
+        }
+
+        if (duplicates.length > 0) {
+          const firstDup = duplicates[0];
           setDuplicateCheck({
             isDuplicate: true,
-            reason: result.create_data.duplicate_check.reason,
-            similarOrderId: result.create_data.duplicate_check.similarOrderId
+            reason: firstDup.duplicate_check.reason,
+            similarOrderId: firstDup.duplicate_check.similarOrderId
           });
-          setPendingOrder({ input, existingOrders, structuredData: result.create_data, clientId });
+          setPendingOrder({ input, existingOrders, structuredData: firstDup, clientId });
           setIsProcessing(false);
           return;
         }
 
-        await executeCreateOrder(rawInputToOrderData(result.create_data, input, user.uid, clientId));
+        setInput("");
+        setIsProcessing(false);
+        return;
       }
 
     } catch (error: any) {
@@ -201,17 +247,27 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
       if (autoCalendar && googleToken && newOrder.deadline) {
         try {
           const startDateTime = parseISO(newOrder.deadline);
-          const endDateTime = addHours(startDateTime, 1);
-          await createGoogleCalendarEvent(googleToken, {
-            summary: `${newOrder.type.toUpperCase()}: ${newOrder.title}`,
-            description: `${newOrder.description}${newOrder.clientName ? `\n\nKunde: ${newOrder.clientName}` : ''}`,
-            start: { dateTime: startDateTime.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-            end: { dateTime: endDateTime.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }
-          });
-          toast.success("Auch im Kalender vermerkt!");
-        } catch (calError) {
-          console.error(calError);
-          toast.error("Auftrag erstellt, aber Kalender-Eintrag fehlgeschlagen.");
+          
+          if (newOrder.type === 'aufgabe') {
+            await createGoogleTask(googleToken, {
+              title: newOrder.title,
+              notes: `${newOrder.description}${newOrder.clientName ? `\n\nKunde: ${newOrder.clientName}` : ''}`,
+              due: startDateTime.toISOString()
+            });
+            toast.success("Auch in Google Tasks eingetragen!");
+          } else {
+            const endDateTime = addHours(startDateTime, 1);
+            await createGoogleCalendarEvent(googleToken, {
+              summary: `${newOrder.type.toUpperCase()}: ${newOrder.title}`,
+              description: `${newOrder.description}${newOrder.clientName ? `\n\nKunde: ${newOrder.clientName}` : ''}`,
+              start: { dateTime: startDateTime.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+              end: { dateTime: endDateTime.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }
+            });
+            toast.success("Auch im Kalender vermerkt!");
+          }
+        } catch (syncError) {
+          console.error(syncError);
+          toast.error("Auftrag erstellt, aber Google Sync fehlgeschlagen.");
         }
       }
 
@@ -239,7 +295,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
           placeholder="z.B. Sprachnotizen, Chat-Auszüge oder direkte Texte..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          className="min-h-[100px] bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-600 rounded-2xl resize-none pr-12 focus:ring-emerald-500/20 focus:border-emerald-500/30 transition-all"
+          className="min-h-[160px] bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-600 rounded-2xl md:resize-y resize-none pr-12 focus:ring-emerald-500/20 focus:border-emerald-500/30 transition-all"
         />
         <div className="absolute right-3 top-3">
           <div className={cn(
@@ -258,7 +314,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
             className="data-[state=checked]:bg-emerald-500"
           />
           <Label htmlFor="auto-calendar" className="text-[10px] uppercase font-bold text-slate-500 cursor-pointer flex items-center gap-1.5">
-            <CalendarPlus className="w-3 h-3" /> Im Google Kalender eintragen
+            <CalendarPlus className="w-3 h-3" /> In Google Tasks / Kalender synchronisieren
           </Label>
         </div>
       </div>

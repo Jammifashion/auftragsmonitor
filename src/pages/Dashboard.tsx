@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../AuthContext";
 import { db } from "../lib/firebase";
-import { collection, query, where, getDocs, orderBy, deleteDoc, doc, writeBatch } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, deleteDoc, doc, writeBatch, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Badge } from "../components/ui/badge";
 import { CheckCircle2, Clock, ListTodo, AlertCircle, Calendar as CalendarIcon, CalendarCheck, Trash2, Edit, UserPlus, MoreVertical, Menu } from "lucide-react";
 import { format, parseISO, addDays, isWithinInterval, startOfToday, endOfDay } from "date-fns";
@@ -145,6 +145,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [detailOrder, setDetailOrder] = useState<any>(null);
   const [detailClient, setDetailClient] = useState<any>(null);
+  const [detailClientView, setDetailClientView] = useState<any>(null);
   const [calendarOrder, setCalendarOrder] = useState<any>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [editingOrder, setEditingOrder] = useState<any>(null);
@@ -224,6 +225,20 @@ export default function Dashboard() {
     }
   };
 
+  const toggleComplete = async (orderId: string, currentStatus: string) => {
+    try {
+      const nextStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+      await updateDoc(doc(db, "orders", orderId), { status: nextStatus, updatedAt: serverTimestamp() });
+      toast.success(nextStatus === 'completed' ? "Erledigt!" : "Wieder offen");
+      fetchData();
+      if (detailOrder && detailOrder.id === orderId) {
+        setDetailOrder({ ...detailOrder, status: nextStatus });
+      }
+    } catch (e) {
+      toast.error("Status konnte nicht geändert werden.");
+    }
+  };
+
   const deleteClient = async (clientId: string) => {
     try {
       await deleteDoc(doc(db, "clients", clientId));
@@ -240,7 +255,8 @@ export default function Dashboard() {
   if (loading) return <div className="h-full flex items-center justify-center text-slate-400">Lade Dashboard...</div>;
 
   const callbacks = recentEntries.filter(e => e.type === 'callback' && e.status !== 'completed');
-  const structure = recentEntries.filter(e => e.type === 'structure');
+  const structure = recentEntries.filter(e => e.type === 'structure' || e.type === 'idee');
+  const aufgaben = recentEntries.filter(e => e.type === 'aufgabe');
   const orders = recentEntries.filter(e => e.type === 'order');
 
   return (
@@ -267,6 +283,13 @@ export default function Dashboard() {
 
         {viewMode === 'orders' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 md:overflow-auto pb-6">
+        {/* Bento: New Item Action */}
+        <div className="col-span-1 md:col-span-4 bento-card flex flex-row items-center justify-center p-5 md:p-6 bg-blue-500/5 border-blue-500/20">
+          <Link to="/orders" className="w-full max-w-sm py-4 bg-blue-600 text-white text-sm font-black rounded-xl hover:bg-blue-500 transition-all text-center shadow-xl">
+            ERFASSUNG
+          </Link>
+        </div>
+
         {/* Bento: Stats Row */}
         <div className="col-span-1 md:col-span-2 lg:col-span-2 lg:row-span-1 bento-gradient flex flex-col justify-between p-5 md:p-6">
           <div>
@@ -279,7 +302,7 @@ export default function Dashboard() {
               <p className="text-3xl font-bold text-emerald-400">{stats.orders}</p>
             </div>
             <div className="flex-1 bg-slate-800/30 p-4 rounded-2xl border border-slate-700/30 backdrop-blur-sm">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Struktur</p>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Ideen</p>
               <p className="text-3xl font-bold text-blue-400">{stats.structure}</p>
             </div>
           </div>
@@ -292,14 +315,20 @@ export default function Dashboard() {
           </h3>
           <div className="space-y-3">
             {callbacks.length > 0 ? callbacks.slice(0, 2).map(cb => (
-              <div key={cb.id} className="flex items-center gap-3 bg-slate-800/20 p-2 rounded-lg border border-slate-800">
-                <div className="w-8 h-8 rounded bg-orange-500/10 flex items-center justify-center text-orange-500 font-bold text-[10px]">
+                <div key={cb.id} className="flex items-center gap-3 bg-slate-800/20 p-2 rounded-lg border border-slate-800 cursor-pointer hover:bg-slate-800/40 group" onClick={() => setDetailOrder(cb)}>
+                <div className="w-8 h-8 rounded bg-orange-500/10 flex items-center justify-center text-orange-500 font-bold text-[10px] shrink-0">
                   📞
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate">{cb.clientName || 'Unbekannt'}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold truncate text-slate-200">{cb.clientName || 'Unbekannt'}</p>
                   <p className="text-[10px] text-slate-500 truncate">{cb.title}</p>
                 </div>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); toggleComplete(cb.id, cb.status); }}
+                  className="w-6 h-6 rounded-full border border-slate-700 flex items-center justify-center hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all text-slate-600 hover:text-emerald-500"
+                >
+                  <CheckCircle2 className="w-3 h-3" />
+                </button>
               </div>
             )) : (
               <p className="text-[10px] text-slate-600 italic text-center py-4">Keine Rückrufe offen.</p>
@@ -307,12 +336,39 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Bento: New Item Action */}
-        <div className="col-span-1 row-span-1 bento-card flex flex-col justify-between p-5 md:p-6">
-          <h3 className="text-blue-400 font-semibold mb-4 uppercase text-xs tracking-wider">Aktion</h3>
-          <Link to="/orders" className="w-full py-4 bg-slate-100 text-slate-950 text-xs font-black rounded-2xl hover:bg-white transition-all text-center shadow-xl">
-            SCHNELLERFASSUNG
-          </Link>
+        {/* Bento: Neue Aufgaben Area */}
+        <div className="col-span-1 row-span-1 bento-card flex flex-col p-5 md:p-6 border-emerald-500/20 overflow-auto">
+          <h3 className="text-emerald-400 font-semibold mb-4 uppercase text-xs tracking-wider flex items-center gap-2">
+            <ListTodo className="w-3 h-3" /> Aufgaben (KI)
+          </h3>
+          <div className="space-y-3">
+            {aufgaben.length > 0 ? aufgaben.map(aufgabe => (
+              <div key={aufgabe.id} className="flex items-center justify-between bg-slate-800/20 p-2 rounded-lg border border-slate-800 cursor-pointer hover:bg-slate-800/40 group" onClick={() => setDetailOrder(aufgabe)}>
+                <div className="flex items-center gap-2 min-w-0 pr-2">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); toggleComplete(aufgabe.id, aufgabe.status); }}
+                    className={cn(
+                      "w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0",
+                      aufgabe.status === 'completed' ? "bg-emerald-500 border-emerald-500 text-slate-950" : "border-slate-700 text-transparent hover:border-emerald-500/50 hover:text-emerald-500"
+                    )}
+                  >
+                    <CheckCircle2 className="w-3 h-3" />
+                  </button>
+                  <div className="min-w-0">
+                    <p className={cn("text-xs font-semibold truncate", aufgabe.status === 'completed' ? "text-slate-500 line-through" : "text-slate-200")}>{aufgabe.title}</p>
+                    <p className="text-[10px] text-slate-500 truncate">{aufgabe.clientName || 'Intern'}</p>
+                  </div>
+                </div>
+                {aufgabe.deadline && (
+                  <div className="text-[10px] text-emerald-400 whitespace-nowrap bg-emerald-400/10 px-2 py-1 rounded">
+                    {format(parseISO(aufgabe.deadline), 'dd.MM')}
+                  </div>
+                )}
+              </div>
+            )) : (
+              <p className="text-[10px] text-slate-600 italic text-center py-4">Keine KI-Aufgaben vorhanden.</p>
+            )}
+          </div>
         </div>
 
         {/* Bento: Active Orders Table */}
@@ -336,12 +392,25 @@ export default function Dashboard() {
                   <tr 
                     key={order.id} 
                     onClick={() => setDetailOrder(order)}
-                    className="border-b border-slate-800/50 hover:bg-slate-800/20 transition-colors cursor-pointer"
+                    className="border-b border-slate-800/50 hover:bg-slate-800/20 transition-colors cursor-pointer group"
                   >
                     <td className="px-6 py-4 font-bold text-slate-200 underline decoration-emerald-500/30 underline-offset-8 truncate max-w-[120px]">
-                      {order.clientName}
+                      <div className="flex items-center gap-3">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); toggleComplete(order.id, order.status); }}
+                          className={cn(
+                            "w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0",
+                            order.status === 'completed' ? "bg-emerald-500 border-emerald-500 text-slate-950" : "border-slate-700 text-transparent hover:border-emerald-500/50 hover:text-emerald-500"
+                          )}
+                        >
+                          <CheckCircle2 className="w-3 h-3" />
+                        </button>
+                        <span className={cn(order.status === 'completed' && "text-slate-500 line-through")}>
+                          {order.clientName}
+                        </span>
+                      </div>
                     </td>
-                    <td className="px-6 py-4 text-slate-400 truncate max-w-[200px]">
+                    <td className={cn("px-6 py-4 text-slate-400 truncate max-w-[200px]", order.status === 'completed' && "text-slate-600 line-through")}>
                       {order.title}
                     </td>
                     <td className="px-6 py-4 text-right text-slate-500 text-xs font-mono">
@@ -383,10 +452,10 @@ export default function Dashboard() {
         </div>
 
         {/* Bento: Structure / Tasks */}
-        <div className="col-span-1 lg:row-span-2 bento-card p-0 flex flex-col overflow-hidden border-blue-500/20 min-h-[300px]">
+        <div className="col-span-1 lg:row-span-2 bento-card p-0 flex flex-col overflow-hidden border-slate-500/20 min-h-[300px]">
           <div className="p-4 border-b border-slate-800">
-            <h3 className="text-blue-400 font-semibold uppercase text-xs tracking-wider flex items-center gap-2">
-              <AlertCircle className="w-3 h-3" /> Interne Struktur
+            <h3 className="text-slate-400 font-semibold uppercase text-xs tracking-wider flex items-center gap-2">
+              <AlertCircle className="w-3 h-3" /> Sonstiges (Ideen)
             </h3>
           </div>
           <div className="flex-1 p-4 space-y-4 overflow-auto">
@@ -394,21 +463,130 @@ export default function Dashboard() {
               <div 
                 key={s.id} 
                 onClick={() => setDetailOrder(s)}
-                className="p-3 bg-slate-950/50 rounded-xl border border-slate-800 cursor-pointer hover:border-blue-500/40 transition-colors"
+                className="p-3 bg-slate-950/50 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-500/40 transition-colors"
               >
                 <p className="text-xs font-bold text-slate-200 mb-1">{s.title}</p>
                 <p className="text-[10px] text-slate-500 line-clamp-2 italic">{s.description}</p>
               </div>
             )) : (
-              <p className="text-[10px] text-slate-600 italic text-center py-8">Keine Strukturaufgaben.</p>
+              <p className="text-[10px] text-slate-600 italic text-center py-8">Keine unkategorisierten Ideen.</p>
             )}
           </div>
         </div>
         </div>
         ) : (
+          detailClientView ? (
+            <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="flex items-center justify-between bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
+                 <button 
+                   onClick={() => setDetailClientView(null)}
+                   className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-xs font-bold uppercase tracking-tight"
+                 >
+                   ← Alle Kunden 
+                 </button>
+                 <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-400 hover:text-blue-400" onClick={() => setEditingClient(detailClientView)}>
+                       <Edit className="w-3 h-3 mr-1" /> Bearbeiten
+                    </Button>
+                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                 {/* Card Profile */}
+                 <div className="lg:col-span-1 bento-card p-6 border-blue-500/20">
+                    <div className="mb-6">
+                       <h3 className="text-2xl font-bold text-white mb-1">{detailClientView.name}</h3>
+                       {detailClientView.aliases && detailClientView.aliases.length > 0 && (
+                         <div className="flex flex-wrap gap-2 mt-2">
+                           {detailClientView.aliases.map((a: string) => (
+                             <Badge key={a} variant="secondary" className="bg-slate-800 text-[10px] text-slate-400 border-none">{a}</Badge>
+                           ))}
+                         </div>
+                       )}
+                    </div>
+                    
+                    <div className="space-y-4">
+                       <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Kontakt</p>
+                          {detailClientView.telefon && <p className="text-sm text-slate-300">📞 {detailClientView.telefon}</p>}
+                          {detailClientView.email && <p className="text-sm text-slate-300">✉️ {detailClientView.email}</p>}
+                          {detailClientView.adresse && <p className="text-sm text-slate-300">📍 {detailClientView.adresse}</p>}
+                       </div>
+                       
+                       {detailClientView.zahlungsinfo && (
+                         <div className="space-y-1">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Zahlungsinfo</p>
+                            <p className="text-sm text-emerald-400 font-mono">💳 {detailClientView.zahlungsinfo}</p>
+                         </div>
+                       )}
+
+                       {detailClientView.insights && (
+                         <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Stimmungs-Radar</p>
+                            <p className="text-xs text-slate-400 italic">{detailClientView.insights}</p>
+                         </div>
+                       )}
+                    </div>
+                 </div>
+
+                 {/* Open Tasks for Client */}
+                 <div className="lg:col-span-2 bento-card p-6 border-blue-500/10 flex flex-col min-h-[400px]">
+                    <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                       <ListTodo className="w-4 h-4 text-blue-400" /> Offene Einträge
+                    </h3>
+                    
+                    <div className="space-y-3">
+                       {recentEntries.filter(o => {
+                         const isLinkedById = o.clientId === detailClientView.id;
+                         const isLinkedByName = o.clientName?.toLowerCase().includes(detailClientView.name.toLowerCase());
+                         const isLinkedByAlias = detailClientView.aliases?.some((a: string) => o.clientName?.toLowerCase().includes(a.toLowerCase()));
+                         return (isLinkedById || isLinkedByName || isLinkedByAlias) && o.status !== 'completed';
+                       }).length > 0 ? (
+                         recentEntries.filter(o => {
+                           const isLinkedById = o.clientId === detailClientView.id;
+                           const isLinkedByName = o.clientName?.toLowerCase().includes(detailClientView.name.toLowerCase());
+                           const isLinkedByAlias = detailClientView.aliases?.some((a: string) => o.clientName?.toLowerCase().includes(a.toLowerCase()));
+                           return (isLinkedById || isLinkedByName || isLinkedByAlias) && o.status !== 'completed';
+                         }).map(order => (
+                           <div key={order.id} className="flex items-center justify-between bg-slate-800/30 p-4 rounded-xl border border-slate-800/50 hover:border-blue-500/30 transition-all cursor-pointer group" onClick={() => setDetailOrder(order)}>
+                              <div className="flex items-center gap-4 flex-1 min-w-0 pr-4">
+                                 <button 
+                                    onClick={(e) => { e.stopPropagation(); toggleComplete(order.id, order.status); }}
+                                    className="w-6 h-6 rounded-md border border-slate-700 flex items-center justify-center hover:bg-emerald-500/20 hover:border-emerald-500 transition-all text-transparent hover:text-emerald-500"
+                                 >
+                                    <CheckCircle2 className="w-4 h-4" />
+                                 </button>
+                                 <div className="min-w-0">
+                                    <h4 className="text-sm font-bold text-slate-100 group-hover:text-blue-400 transition-colors truncate">{order.title}</h4>
+                                    <p className="text-xs text-slate-500 truncate">{order.description}</p>
+                                 </div>
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0">
+                                 <Badge variant="outline" className="text-[9px] uppercase border-slate-800 text-slate-500">
+                                    {order.type}
+                                 </Badge>
+                                 {order.deadline && (
+                                   <div className="text-[10px] font-mono text-slate-500">
+                                      {format(parseISO(order.deadline), 'dd.MM')}
+                                   </div>
+                                 )}
+                              </div>
+                           </div>
+                         ))
+                       ) : (
+                         <div className="flex-1 flex flex-col items-center justify-center text-slate-600 gap-2 border-2 border-dashed border-slate-800 rounded-2xl p-8">
+                            <CheckCircle2 className="w-8 h-8 opacity-20" />
+                            <p className="text-xs italic">Keine offenen Aufgaben für diesen Kunden.</p>
+                         </div>
+                       )}
+                    </div>
+                 </div>
+              </div>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-auto pb-6">
             {clients.map(client => (
-              <div key={client.id} className="bento-card border-blue-500/20 flex flex-col">
+              <div key={client.id} className="bento-card border-blue-500/20 flex flex-col cursor-pointer transition-all hover:scale-[1.02]" onClick={() => setDetailClientView(client)}>
                  <div className="flex justify-between items-start mb-4">
                     <div>
                       <h3 className="text-lg font-bold text-slate-100">{client.name}</h3>
@@ -486,7 +664,8 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-        )}
+        )
+      )}
 
         {/* Detail Dialog */}
         <Dialog open={!!detailOrder} onOpenChange={() => setDetailOrder(null)}>
@@ -576,13 +755,25 @@ export default function Dashboard() {
                   >
                     <Edit className="w-4 h-4" />
                   </Button>
-                  <Button 
-                    size="sm"
-                    className="bg-emerald-600 hover:bg-emerald-500 font-bold h-9 text-xs"
-                    onClick={() => { setCalendarOrder(detailOrder); setDetailOrder(null); }}
-                  >
-                    <CalendarCheck className="w-3.5 h-3.5 mr-2" /> Kalender
-                  </Button>
+                    <Button 
+                      size="sm"
+                      className={cn(
+                        "font-bold h-9 text-xs transition-all",
+                        detailOrder?.status === 'completed' ? "bg-slate-700 text-slate-400" : "bg-emerald-600 hover:bg-emerald-500 text-white"
+                      )}
+                      onClick={() => toggleComplete(detailOrder.id, detailOrder.status)}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> 
+                      {detailOrder?.status === 'completed' ? "Erledigt" : "Abschließen"}
+                    </Button>
+                    <Button 
+                      size="sm"
+                      variant="outline"
+                      className="bg-slate-800 border-slate-700 hover:bg-slate-700 text-white font-bold h-9 text-xs"
+                      onClick={() => { setCalendarOrder(detailOrder); setDetailOrder(null); }}
+                    >
+                      <CalendarCheck className="w-3.5 h-3.5 mr-2" /> Kalender
+                    </Button>
                 </div>
               </div>
             </div>
@@ -654,6 +845,7 @@ export default function Dashboard() {
             googleToken={googleToken} 
           />
         )}
+
       </main>
     </div>
   );

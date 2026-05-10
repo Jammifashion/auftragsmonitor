@@ -3,10 +3,10 @@ import { GoogleGenAI, Type } from "@google/genai";
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
 export interface ZeroFrictionResponse {
-  intent: "create" | "query" | "crm_update" | "delete_record" | "merge_clients";
+  intent: "create" | "query" | "crm_update" | "delete_record" | "merge_clients" | "mark_completed";
   text_response: string;
   create_data: {
-    type: "order" | "structure" | "callback";
+    type: "order" | "aufgabe" | "idee" | "callback";
     title: string;
     clientName?: string;
     description: string;
@@ -22,7 +22,7 @@ export interface ZeroFrictionResponse {
       reason: string;
       similarOrderId?: string;
     };
-  } | null;
+  }[] | null;
   client_data: {
     name: string;
     telefon: string | null;
@@ -45,38 +45,41 @@ export interface ZeroFrictionResponse {
 export const zeroFrictionSchema = {
   type: Type.OBJECT,
   properties: {
-    intent: { type: Type.STRING, enum: ["create", "query", "crm_update", "delete_record", "merge_clients"] },
+    intent: { type: Type.STRING, enum: ["create", "query", "crm_update", "delete_record", "merge_clients", "mark_completed"] },
     text_response: { type: Type.STRING, description: "Short friendly response text" },
     create_data: {
-      type: Type.OBJECT,
+      type: Type.ARRAY,
       nullable: true,
-      properties: {
-        type: { type: Type.STRING, enum: ["order", "structure", "callback"] },
-        title: { type: Type.STRING },
-        clientName: { type: Type.STRING, nullable: true },
-        description: { type: Type.STRING },
-        deadline: { type: Type.STRING, nullable: true, description: "YYYY-MM-DD" },
-        priority: { type: Type.STRING, enum: ["low", "medium", "high"] },
-        structured_details: {
-          type: Type.OBJECT,
-          properties: {
-            kern_aufgabe: { type: Type.STRING },
-            naechster_schritt: { type: Type.STRING },
-            hintergrund_info: { type: Type.STRING, nullable: true }
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          type: { type: Type.STRING, enum: ["order", "aufgabe", "idee", "callback"] },
+          title: { type: Type.STRING },
+          clientName: { type: Type.STRING, nullable: true },
+          description: { type: Type.STRING },
+          deadline: { type: Type.STRING, nullable: true, description: "YYYY-MM-DD" },
+          priority: { type: Type.STRING, enum: ["low", "medium", "high"] },
+          structured_details: {
+            type: Type.OBJECT,
+            properties: {
+              kern_aufgabe: { type: Type.STRING },
+              naechster_schritt: { type: Type.STRING },
+              hintergrund_info: { type: Type.STRING, nullable: true }
+            },
+            required: ["kern_aufgabe", "naechster_schritt"]
           },
-          required: ["kern_aufgabe", "naechster_schritt"]
+          duplicate_check: {
+            type: Type.OBJECT,
+            properties: {
+              is_potential_duplicate: { type: Type.BOOLEAN },
+              reason: { type: Type.STRING, nullable: true },
+              similarOrderId: { type: Type.STRING, nullable: true }
+            },
+            required: ["is_potential_duplicate"]
+          }
         },
-        duplicate_check: {
-          type: Type.OBJECT,
-          properties: {
-            is_potential_duplicate: { type: Type.BOOLEAN },
-            reason: { type: Type.STRING, nullable: true },
-            similarOrderId: { type: Type.STRING, nullable: true }
-          },
-          required: ["is_potential_duplicate"]
-        }
-      },
-      required: ["type", "title", "description", "priority", "duplicate_check"]
+        required: ["type", "title", "description", "priority", "duplicate_check"]
+      }
     },
     client_data: {
       type: Type.OBJECT,
@@ -160,14 +163,18 @@ export async function mergeOrders(orders: any[]): Promise<any> {
       
       Instructions:
       1. Determine intent: 
-         - 'create' for new actionable tasks (order, structure, callback).
+         - 'create' for new actionable tasks (order, aufgabe, idee, callback).
+         - 'aufgabe': For explicit tasks or scheduled to-dos that have a deadline or need to be done.
+         - 'idee': for unstructured tasks, ideas, internal notes, or things you cannot clearly assign.
          - 'query' for finding information.
          - 'crm_update' for pure customer data updates (phone, email, address) without creating a task.
          - 'delete_record' to delete an order or client.
          - 'merge_clients' to merge two clients or aliases.
 
       2. ALIAS-REGEL (Identitäts-Verknüpfung):
-         Wenn ein Name (z.B. Timo Schenck) UND ein Projektname/Firma (z.B. Malle Prinz) genannt werden, verknüpfe sie im Feld 'clientName' zwingend als: "Name (Alias/Projekt)". Beispiel: "Timo Schenck (Malle Prinz)".
+         - Wenn ein Name (z.B. Timo Schenck) UND ein Projektname/Firma (z.B. Malle Prinz) genannt werden, verknüpfe sie im Feld 'clientName' zwingend als: "Name (Alias/Projekt)". Beispiel: "Timo Schenck (Malle Prinz)".
+         - Nutze das 'client_data'-Objekt, um den Hauptnamen (ohne Klammern) zu identifizieren. Falls ein Alias/Projektname ("Arenal Asozial") existiert, füge diesen in den Kontext ein.
+         - WICHTIG: Wenn der Nutzer einen Namen nennt, der fast identisch mit einem bestehenden Kunden oder dessen Alias ist (z.B. "Tim Gestrin" statt "Tim Gestring"), verwende den EXAKTEN Namen aus dem Datenbank-Kontext, um Duplikate zu vermeiden.
 
       3. SILENT-UPDATE-REGEL (Reines CRM-Update):
          Wenn die Eingabe ausschließlich der Aktualisierung von Kundendaten dient (neue Telefonnummer, Adresse, etc), setze intent = 'crm_update' und befüllen nur das 'client_data'-Objekt. Es darf KEIN 'create_data' erstellt werden.
@@ -176,7 +183,7 @@ export async function mergeOrders(orders: any[]): Promise<any> {
          - Befülle 'action_data' mit 'target_type' ("order" oder "client"), 'primary_name', und ggf. 'secondary_name'.
 
       5. Wenn intent == 'create' oder 'crm_update':
-         - Fill 'create_data' (nur bei 'create') with type, title, description, and priority.
+         - Fill 'create_data' (nur bei 'create') as an ARRAY of tasks/orders. Wenn der Nutzer mehrere Aufgaben auf einmal nennt, erstelle mehrere Objekte in diesem Array.
          - 'duplicate_check' (nur bei 'create'): Search 'Existing database context (Orders)'. If a task with a very similar title OR identical clientName + similar goal exists, set is_potential_duplicate = true.
          - 'client_data': Extract contact info if mentioned. Extract ANY subjective feelings, warnings, or mood indicators about the client into 'insights' (Stimmungs-Radar).
          - 'clientName': Extract the name, conforming to the ALIAS-REGEL if applicable.

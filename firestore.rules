@@ -30,7 +30,7 @@ service cloud.firestore {
       allow create: if isWhitelisted() && 
                       request.resource.data.userId == request.auth.uid &&
                       request.resource.data.title is string &&
-                      request.resource.data.type in ['order', 'structure', 'callback'] &&
+                      request.resource.data.type in ['order', 'structure', 'callback', 'aufgabe', 'idee'] &&
                       request.resource.data.createdAt == request.time;
       allow update: if isOwner(resource.data.userId) && 
                       request.resource.data.updatedAt == request.time;

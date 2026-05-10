@@ -29,3 +29,27 @@ export async function createGoogleCalendarEvent(token: string, event: CalendarEv
 
   return await response.json();
 }
+
+export interface GoogleTask {
+  title: string;
+  notes?: string;
+  due?: string; // RFC 3339 timestamp
+}
+
+export async function createGoogleTask(token: string, task: GoogleTask) {
+  const response = await fetch('https://tasks.googleapis.com/tasks/v1/lists/@default/tasks', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(task),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json();
+    throw new Error(errorBody.error?.message || 'Failed to create Google Task');
+  }
+
+  return await response.json();
+}

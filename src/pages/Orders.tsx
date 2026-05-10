@@ -174,7 +174,7 @@ export default function Orders() {
   const [queryState, setQueryState] = useState<any>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [editingOrder, setEditingOrder] = useState<any>(null);
-  const [typeFilter, setTypeFilter] = useState<'all' | 'order' | 'structure' | 'callback'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'order' | 'aufgabe' | 'idee' | 'callback'>('all');
 
   const toggleSelect = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -328,8 +328,8 @@ export default function Orders() {
               <p className="text-xs text-slate-600">{filteredOrders.length} Aufträge gefunden</p>
             </div>
             
-            <div className="flex bg-slate-900 p-1 rounded-xl w-fit">
-              {(['all', 'order', 'structure', 'callback'] as const).map(tab => (
+            <div className="flex bg-slate-900 p-1 rounded-xl w-fit flex-wrap">
+              {(['all', 'order', 'aufgabe', 'idee', 'callback'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setTypeFilter(tab)}
@@ -384,7 +384,8 @@ export default function Orders() {
                           <Badge variant="secondary" className={cn(
                             "text-[8px] uppercase font-bold px-1.5 py-0 rounded-sm border-none",
                             order.type === 'order' ? "bg-emerald-500/10 text-emerald-500" :
-                            order.type === 'structure' ? "bg-blue-500/10 text-blue-500" :
+                            order.type === 'aufgabe' ? "bg-indigo-500/10 text-indigo-500" :
+                            order.type === 'idee' ? "bg-blue-500/10 text-blue-500" :
                             "bg-orange-500/10 text-orange-500"
                           )}>
                             {order.type}
