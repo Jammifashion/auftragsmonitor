@@ -139,7 +139,7 @@ function Header() {
 
 export default function Dashboard() {
   const { user, googleToken } = useAuth();
-  const [stats, setStats] = useState({ total: 0, orders: 0, structure: 0, callbacks: 0 });
+  const [stats, setStats] = useState({ total: 0, orders: 0, aufgaben: 0, ideen: 0, callbacks: 0, structure: 0 });
   const [recentEntries, setRecentEntries] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]); // NEU
   const [loading, setLoading] = useState(true);
@@ -192,10 +192,12 @@ export default function Dashboard() {
       const counts = ordersData.reduce((acc: any, curr: any) => {
         acc.total++;
         if (curr.type === 'order') acc.orders++;
-        else if (curr.type === 'structure') acc.structure++;
+        else if (curr.type === 'aufgabe') acc.aufgaben++;
+        else if (curr.type === 'idee') acc.ideen++;
         else if (curr.type === 'callback') acc.callbacks++;
+        else if (curr.type === 'structure') acc.structure++;
         return acc;
-      }, { total: 0, orders: 0, structure: 0, callbacks: 0 });
+      }, { total: 0, orders: 0, aufgaben: 0, ideen: 0, callbacks: 0, structure: 0 });
 
       setStats(counts);
       setRecentEntries(ordersData);
@@ -296,15 +298,31 @@ export default function Dashboard() {
             <h3 className="text-emerald-400 font-semibold mb-1 uppercase text-xs tracking-wider">Übersicht</h3>
             <p className="text-2xl font-light text-white italic">Alles im Griff.</p>
           </div>
-          <div className="flex items-end gap-4 mt-6">
-            <div className="flex-1 bg-slate-800/30 p-4 rounded-2xl border border-slate-700/30 backdrop-blur-sm">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Aufträge</p>
-              <p className="text-3xl font-bold text-emerald-400">{stats.orders}</p>
-            </div>
-            <div className="flex-1 bg-slate-800/30 p-4 rounded-2xl border border-slate-700/30 backdrop-blur-sm">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Ideen</p>
-              <p className="text-3xl font-bold text-blue-400">{stats.structure}</p>
-            </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-6">
+            <Link to="/orders" state={{ filter: 'order' }} className="bg-slate-800/30 p-3 rounded-xl border border-slate-700/30 backdrop-blur-sm hover:bg-slate-800/50 transition-all group">
+              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 group-hover:text-emerald-400 transition-colors">Aufträge</p>
+              <p className="text-2xl font-bold text-emerald-400">{stats.orders}</p>
+            </Link>
+            <Link to="/orders" state={{ filter: 'aufgabe' }} className="bg-slate-800/30 p-3 rounded-xl border border-slate-700/30 backdrop-blur-sm hover:bg-slate-800/50 transition-all group">
+              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 group-hover:text-amber-400 transition-colors">KI-Tasks</p>
+              <p className="text-2xl font-bold text-amber-400">{stats.aufgaben}</p>
+            </Link>
+            <Link to="/orders" state={{ filter: 'idee' }} className="bg-slate-800/30 p-3 rounded-xl border border-slate-700/30 backdrop-blur-sm hover:bg-slate-800/50 transition-all group">
+              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 group-hover:text-blue-400 transition-colors">Ideen</p>
+              <p className="text-2xl font-bold text-blue-400">{stats.ideen}</p>
+            </Link>
+            <Link to="/orders" state={{ filter: 'callback' }} className="bg-slate-800/30 p-3 rounded-xl border border-slate-700/30 backdrop-blur-sm hover:bg-slate-800/50 transition-all group">
+              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 group-hover:text-orange-400 transition-colors">Rückrufe</p>
+              <p className="text-2xl font-bold text-orange-400">{stats.callbacks}</p>
+            </Link>
+            <Link to="/orders" state={{ filter: 'structure' }} className="bg-slate-800/30 p-3 rounded-xl border border-slate-700/30 backdrop-blur-sm hover:bg-slate-800/50 transition-all group">
+              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 group-hover:text-indigo-400 transition-colors">Struktur</p>
+              <p className="text-2xl font-bold text-indigo-400">{stats.structure}</p>
+            </Link>
+            <Link to="/orders" state={{ filter: 'all' }} className="bg-slate-800/30 p-3 rounded-xl border border-slate-700/30 backdrop-blur-sm hover:bg-slate-800/50 transition-all group border-dashed">
+              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 group-hover:text-white transition-colors">Gesamt</p>
+              <p className="text-2xl font-bold text-white">{stats.total}</p>
+            </Link>
           </div>
         </div>
 

@@ -3,6 +3,7 @@ import { useAuth } from "../AuthContext";
 import { db } from "../lib/firebase";
 import { collection, query, where, getDocs, orderBy, updateDoc, doc, deleteDoc, serverTimestamp, addDoc } from "firebase/firestore";
 import OrderInput from "../components/OrderInput";
+import { useLocation } from "react-router-dom";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -142,6 +143,7 @@ function CalendarEditDialog({ order, onClose, googleToken }: { order: any, onClo
 
 export default function Orders() {
   const { user, googleToken } = useAuth();
+  const location = useLocation();
   const [orders, setOrders] = useState<any[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<any[]>([]);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
@@ -149,6 +151,18 @@ export default function Orders() {
   const [detailClient, setDetailClient] = useState<any>(null);
   const [calendarOrder, setCalendarOrder] = useState<any>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const [loading, setLoading] = useState(true);
+  const [queryState, setQueryState] = useState<any>(null);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+  const [editingOrder, setEditingOrder] = useState<any>(null);
+  const [typeFilter, setTypeFilter] = useState<'all' | 'order' | 'aufgabe' | 'idee' | 'callback'>('all');
+
+  useEffect(() => {
+    if (location.state?.filter) {
+      setTypeFilter(location.state.filter);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     const fetchClient = async () => {
@@ -170,11 +184,6 @@ export default function Orders() {
     };
     fetchClient();
   }, [detailOrder]);
-  const [loading, setLoading] = useState(true);
-  const [queryState, setQueryState] = useState<any>(null);
-  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
-  const [editingOrder, setEditingOrder] = useState<any>(null);
-  const [typeFilter, setTypeFilter] = useState<'all' | 'order' | 'aufgabe' | 'idee' | 'callback'>('all');
 
   const toggleSelect = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
