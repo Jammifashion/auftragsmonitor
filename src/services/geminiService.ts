@@ -9,6 +9,7 @@ export interface ZeroFrictionResponse {
     type: "order" | "aufgabe" | "idee" | "callback";
     title: string;
     clientName?: string;
+    projectName?: string;
     description: string;
     deadline?: string;
     priority: "low" | "medium" | "high";
@@ -56,6 +57,7 @@ export const zeroFrictionSchema = {
           type: { type: Type.STRING, enum: ["order", "aufgabe", "idee", "callback"] },
           title: { type: Type.STRING },
           clientName: { type: Type.STRING, nullable: true },
+          projectName: { type: Type.STRING, nullable: true },
           description: { type: Type.STRING },
           deadline: { type: Type.STRING, nullable: true, description: "YYYY-MM-DD" },
           priority: { type: Type.STRING, enum: ["low", "medium", "high"] },
@@ -91,6 +93,15 @@ export const zeroFrictionSchema = {
         adresse: { type: Type.STRING, nullable: true },
         zahlungsinfo: { type: Type.STRING, nullable: true },
         insights: { type: Type.STRING, nullable: true, description: "Stimmungs-Radar / Client Insights" }
+      },
+      required: ["name"]
+    },
+    project_data: {
+      type: Type.OBJECT,
+      nullable: true,
+      properties: {
+        name: { type: Type.STRING },
+        description: { type: Type.STRING, nullable: true }
       },
       required: ["name"]
     },
@@ -140,10 +151,10 @@ export async function mergeOrders(orders: any[]): Promise<any> {
     return JSON.parse(result.text);
   }
   
-  export async function processUniversalInput(input: string, existingOrders: any[], clientCtx: string = "", userSettings?: any): Promise<ZeroFrictionResponse> {
+  export async function processUniversalInput(input: string, existingOrders: any[], clientCtx: string = "", projectCtx: string = "", userSettings?: any): Promise<ZeroFrictionResponse> {
     const model = "gemini-2.5-flash";
     
-    const ctx = existingOrders.map(o => `ID: ${o.id}, Title: ${o.title}, Client: ${o.clientName || ''}, Type: ${o.type}`).join('\n');
+    const ctx = existingOrders.map(o => `ID: ${o.id}, Title: ${o.title}, Client: ${o.clientName || ''}, Project: ${o.projectName || ''}, Type: ${o.type}`).join('\n');
     const today = new Date().toISOString().split('T')[0];
 
     const toneOfVoice = userSettings?.toneOfVoice || "business";
@@ -178,6 +189,9 @@ export async function mergeOrders(orders: any[]): Promise<any> {
       Existing database context (Clients/CRM):
       ${clientCtx}
       
+      Existing database context (Projects):
+      ${projectCtx}
+      
       Instructions:
       1. Determine intent: 
          - 'create' for new actionable tasks (order, aufgabe, idee, callback).
@@ -204,7 +218,9 @@ export async function mergeOrders(orders: any[]): Promise<any> {
          - Fill 'create_data' (nur bei 'create') as an ARRAY of tasks/orders. Wenn der Nutzer mehrere Aufgaben auf einmal nennt, erstelle mehrere Objekte in diesem Array.
          - 'duplicate_check' (nur bei 'create'): Search 'Existing database context (Orders)'. If a task with a very similar title OR identical clientName + similar goal exists, set is_potential_duplicate = true.
          - 'client_data': Extract contact info if mentioned. Extract ANY subjective feelings, warnings, or mood indicators about the client into 'insights' (Stimmungs-Radar).
+         - 'project_data': Extract project master data if a project (e.g. app development) is mentioned for the first time.
          - 'clientName': Extract the name, conforming to the ALIAS-REGEL if applicable.
+         - 'projectName': Extract the project name if the task belongs to a specific project.
          - ${deadlineInstructions}
       
       6. Wenn intent == 'query':

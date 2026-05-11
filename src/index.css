@@ -5,22 +5,48 @@
   --color-brand-orange: #f97316;
   --color-brand-blue: #3b82f6;
   
+  --color-accent-50: var(--accent-50);
+  --color-accent-100: var(--accent-100);
+  --color-accent-200: var(--accent-200);
+  --color-accent-300: var(--accent-300);
+  --color-accent-400: var(--accent-400);
+  --color-accent-500: var(--accent-500);
+  --color-accent-600: var(--accent-600);
+  --color-accent-700: var(--accent-700);
+  --color-accent-800: var(--accent-800);
+  --color-accent-900: var(--accent-900);
+  --color-accent-950: var(--accent-950);
+
   --radius-bento: 1.5rem;
   --radius-bento-lg: 2rem;
 }
 
+:root {
+  --accent-50: #ecfdf5;
+  --accent-100: #d1fae5;
+  --accent-200: #a7f3d0;
+  --accent-300: #6ee7b7;
+  --accent-400: #34d399;
+  --accent-500: #10b981;
+  --accent-600: #059669;
+  --accent-700: #047857;
+  --accent-800: #065f46;
+  --accent-900: #064e3b;
+  --accent-950: #022c22;
+}
+
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 antialiased;
+    @apply bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased;
   }
 }
 
 .bento-card {
-  @apply bg-slate-900 border border-slate-800 rounded-bento p-6 shadow-sm transition-all hover:border-slate-700/50;
+  @apply bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-bento p-6 shadow-sm transition-all hover:border-slate-300/50 dark:hover:border-slate-700/50;
 }
 
 .bento-gradient {
-  @apply bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700/50 rounded-bento p-6 shadow-xl;
+  @apply bg-gradient-to-br from-white dark:from-slate-900 to-slate-100 dark:to-slate-800 border border-slate-200/50 dark:border-slate-700/50 rounded-bento p-6 shadow-xl;
 }
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";

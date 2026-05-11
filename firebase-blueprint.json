@@ -8,6 +8,8 @@
         "title": { "type": "string", "description": "Short title of the entry" },
         "clientId": { "type": "string", "description": "Reference to the client document ID" },
         "clientName": { "type": "string", "description": "Redundant customer name for fast display" },
+        "projectId": { "type": "string", "description": "Reference to the project document ID" },
+        "projectName": { "type": "string", "description": "Redundant project name for fast display" },
         "description": { "type": "string", "description": "Detailed description or task content" },
         "deadline": { "type": "string", "format": "date-time", "description": "When it is due" },
         "type": {
@@ -48,6 +50,19 @@
       },
       "required": ["name", "userId", "updatedAt"]
     },
+    "Project": {
+      "title": "Project",
+      "description": "Master data for a project (e.g., app development).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string", "nullable": true },
+        "status": { "type": "string", "enum": ["active", "completed", "paused"] },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": ["name", "userId", "updatedAt"]
+    },
     "User": {
       "title": "User",
       "description": "User specific settings.",
@@ -70,6 +85,10 @@
     "clients": {
        "schema": "Client",
        "description": "Invisible CRM collection."
+    },
+    "projects": {
+       "schema": "Project",
+       "description": "Project master data."
     },
     "users": {
        "schema": "User",

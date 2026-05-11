@@ -41,35 +41,35 @@ export default function EditClientDialog({ client, onClose, onUpdated }: { clien
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-bento max-w-md">
+      <DialogContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-bento max-w-md">
         <DialogHeader>
           <DialogTitle className="text-blue-400 font-bold uppercase tracking-wider text-sm">Kunde bearbeiten</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
           <div className="space-y-1">
-            <Label className="text-xs text-slate-400">Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="bg-slate-950 border-slate-800" required />
+            <Label className="text-xs text-slate-500 dark:text-slate-400">Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800" required />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-slate-400">Telefon</Label>
-            <Input value={telefon} onChange={(e) => setTelefon(e.target.value)} className="bg-slate-950 border-slate-800" />
+            <Label className="text-xs text-slate-500 dark:text-slate-400">Telefon</Label>
+            <Input value={telefon} onChange={(e) => setTelefon(e.target.value)} className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800" />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-slate-400">E-Mail</Label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="bg-slate-950 border-slate-800" />
+            <Label className="text-xs text-slate-500 dark:text-slate-400">E-Mail</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800" />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-slate-400">Adresse</Label>
-            <Textarea value={adresse} onChange={(e) => setAdresse(e.target.value)} className="bg-slate-950 border-slate-800" rows={2} />
+            <Label className="text-xs text-slate-500 dark:text-slate-400">Adresse</Label>
+            <Textarea value={adresse} onChange={(e) => setAdresse(e.target.value)} className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800" rows={2} />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-slate-400">Stimmungs-Radar (Insights)</Label>
-            <Textarea value={insights} onChange={(e) => setInsights(e.target.value)} className="bg-slate-950 border-slate-800" rows={3} />
+            <Label className="text-xs text-slate-500 dark:text-slate-400">Stimmungs-Radar (Insights)</Label>
+            <Textarea value={insights} onChange={(e) => setInsights(e.target.value)} className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800" rows={3} />
           </div>
           
           <DialogFooter className="mt-6 gap-2">
-             <Button type="button" variant="outline" onClick={onClose} className="border-slate-700 bg-transparent text-slate-400 hover:bg-slate-800">Abbrechen</Button>
-             <Button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-500 font-bold text-white">
+             <Button type="button" variant="outline" onClick={onClose} className="border-slate-300 dark:border-slate-700 bg-transparent text-slate-500 dark:text-slate-400 hover:bg-white dark:bg-slate-800">Abbrechen</Button>
+             <Button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-500 font-bold text-slate-900 dark:text-white">
                {isSubmitting ? "Speichert..." : "Speichern"}
              </Button>
           </DialogFooter>

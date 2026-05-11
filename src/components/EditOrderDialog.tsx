@@ -72,18 +72,18 @@ export default function EditOrderDialog({ order, onClose, onUpdated }: { order: 
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-slate-900 border-slate-800 text-slate-200 sm:max-w-[500px]">
+      <DialogContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle className="text-white">Auftrag bearbeiten</DialogTitle>
+          <DialogTitle className="text-slate-900 dark:text-white">Auftrag bearbeiten</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="grid gap-2">
-            <Label className="text-slate-400">Titel</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} className="bg-slate-950 border-slate-800 text-white" />
+            <Label className="text-slate-500 dark:text-slate-400">Titel</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white" />
           </div>
 
           <div className="grid gap-2 relative">
-            <Label className="text-slate-400">Kunde / Firma</Label>
+            <Label className="text-slate-500 dark:text-slate-400">Kunde / Firma</Label>
             <div className="relative">
               <Input 
                 value={clientSearch} 
@@ -93,21 +93,21 @@ export default function EditOrderDialog({ order, onClose, onUpdated }: { order: 
                   setShowClientSuggestions(true);
                 }}
                 onFocus={() => setShowClientSuggestions(true)}
-                className="bg-slate-950 border-slate-800 pr-10 text-white"
+                className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 pr-10 text-slate-900 dark:text-white"
                 placeholder="Name suchen oder neu eingeben..."
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-500">
                 <Search className="w-4 h-4" />
               </div>
               
               {showClientSuggestions && (clientSearch.length > 0 || allClients.length > 0) && (
-                <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg shadow-2xl max-h-[200px] overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute z-50 w-full mt-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl max-h-[200px] overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
                   <div className="p-1">
                     {filteredClients.length > 0 ? (
                       filteredClients.map(client => (
                         <button
                           key={client.id}
-                          className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 rounded-md transition-colors flex items-center justify-between group"
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-white dark:bg-slate-800 rounded-md transition-colors flex items-center justify-between group"
                           onClick={() => {
                             setClientName(client.name);
                             setClientSearch(client.name);
@@ -116,22 +116,22 @@ export default function EditOrderDialog({ order, onClose, onUpdated }: { order: 
                           }}
                         >
                           <div className="flex flex-col">
-                            <span className="font-bold text-slate-200 group-hover:text-blue-400">{client.name}</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-400">{client.name}</span>
                             {client.aliases && client.aliases.length > 0 && (
-                              <span className="text-[10px] text-slate-500 italic truncate max-w-[200px]">
+                              <span className="text-[10px] text-slate-500 dark:text-slate-500 italic truncate max-w-[200px]">
                                 {client.aliases.join(", ")}
                               </span>
                             )}
                           </div>
-                          {clientId === client.id && <Check className="w-3 h-3 text-emerald-500" />}
+                          {clientId === client.id && <Check className="w-3 h-3 text-accent-500" />}
                         </button>
                       ))
                     ) : (
-                      <p className="px-3 py-2 text-[10px] text-slate-500 italic">Keine Treffer - wird als neuer Kundenname gespeichert</p>
+                      <p className="px-3 py-2 text-[10px] text-slate-500 dark:text-slate-500 italic">Keine Treffer - wird als neuer Kundenname gespeichert</p>
                     )}
-                    <div className="border-t border-slate-800 my-1 pb-1">
+                    <div className="border-t border-slate-200 dark:border-slate-800 my-1 pb-1">
                        <button
-                         className="w-full text-left px-3 py-2 text-[10px] text-blue-400 font-bold hover:bg-slate-800 rounded-md"
+                         className="w-full text-left px-3 py-2 text-[10px] text-blue-400 font-bold hover:bg-white dark:bg-slate-800 rounded-md"
                          onClick={() => setShowClientSuggestions(false)}
                        >
                          Eingabe übernehmen
@@ -150,20 +150,20 @@ export default function EditOrderDialog({ order, onClose, onUpdated }: { order: 
           </div>
 
           <div className="grid gap-2">
-            <Label className="text-slate-400">Beschreibung</Label>
+            <Label className="text-slate-500 dark:text-slate-400">Beschreibung</Label>
             <Textarea 
               value={description} 
               onChange={(e) => setDescription(e.target.value)} 
-              className="bg-slate-950 border-slate-800 min-h-[150px] md:resize-y text-sm text-slate-300" 
+              className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 min-h-[150px] md:resize-y text-sm text-slate-600 dark:text-slate-300" 
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
-              <Label className="text-slate-400">Typ</Label>
+              <Label className="text-slate-500 dark:text-slate-400">Typ</Label>
               <Select value={type} onValueChange={setType}>
-                <SelectTrigger className="bg-slate-950 border-slate-800 text-white"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
+                <SelectTrigger className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200">
                   <SelectItem value="order">Kunde (Order)</SelectItem>
                   <SelectItem value="aufgabe">Aufgabe (KI)</SelectItem>
                   <SelectItem value="idee">Idee / Sonstiges</SelectItem>
@@ -173,10 +173,10 @@ export default function EditOrderDialog({ order, onClose, onUpdated }: { order: 
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label className="text-slate-400">Status</Label>
+              <Label className="text-slate-500 dark:text-slate-400">Status</Label>
               <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger className="bg-slate-950 border-slate-800 text-white"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
+                <SelectTrigger className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200">
                   <SelectItem value="pending">Offen</SelectItem>
                   <SelectItem value="completed">Abgeschlossen</SelectItem>
                 </SelectContent>
@@ -185,8 +185,8 @@ export default function EditOrderDialog({ order, onClose, onUpdated }: { order: 
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={onClose} className="hover:bg-slate-800 hover:text-white border border-slate-800">Abbrechen</Button>
-          <Button onClick={handleSave} disabled={isSaving} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-8">
+          <Button variant="ghost" onClick={onClose} className="hover:bg-white dark:bg-slate-800 hover:text-slate-900 dark:text-white border border-slate-200 dark:border-slate-800">Abbrechen</Button>
+          <Button onClick={handleSave} disabled={isSaving} className="bg-accent-600 hover:bg-accent-500 text-slate-900 dark:text-white font-bold px-8">
             {isSaving ? "Speichert..." : "Änderungen Speichern"}
           </Button>
         </DialogFooter>

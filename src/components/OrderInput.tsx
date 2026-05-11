@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Mic, Send, Sparkles, Loader2, StopCircle, CalendarPlus, AlertCircle } from "lucide-react";
+import { Mic, Send, Sparkles, Loader2, StopCircle, CalendarPlus, AlertCircle, Volume2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { processUniversalInput } from "../services/geminiService";
@@ -14,17 +14,18 @@ import { parseISO, addHours } from "date-fns";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
 
-export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated: () => void, onQuery?: (queryData: any) => void }) {
+export default function OrderInput({ onOrderCreated, onQuery, hideAiResponseText }: { onOrderCreated: () => void, onQuery?: (queryData: any) => void, hideAiResponseText?: boolean }) {
   const { user, googleToken, login } = useAuth();
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [autoCalendar, setAutoCalendar] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
   const [duplicateCheck, setDuplicateCheck] = useState<{ isDuplicate: boolean; similarOrderId?: string; reason?: string } | null>(null);
   const [pendingOrder, setPendingOrder] = useState<any>(null);
   const [pendingAction, setPendingAction] = useState<any>(null);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
   const [userSettings, setUserSettings] = useState<any>({});
+  const [wasVoiceInput, setWasVoiceInput] = useState(false);
   
   const recognitionRef = useRef<any>(null);
 
@@ -60,6 +61,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
     recognitionRef.current.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
       setInput(transcript);
+      setWasVoiceInput(true);
     };
 
     recognitionRef.current.start();
@@ -68,6 +70,42 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
   const stopListening = () => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
+    }
+  };
+
+  const upsertProject = async (projectData: any, userId: string): Promise<string | null> => {
+    if (!projectData?.name) return null;
+    try {
+      const now = new Date().toISOString();
+      const q = query(collection(db, "projects"), where("userId", "==", userId), where("name", "==", projectData.name), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const projectDoc = snap.docs[0];
+        const existing = projectDoc.data();
+        let update: any = { updatedAt: now };
+        let hasChanges = false;
+        
+        if (projectData.description && projectData.description !== existing.description) { update.description = projectData.description; hasChanges = true; }
+        
+        if (hasChanges) {
+           await updateDoc(projectDoc.ref, update);
+        }
+        return projectDoc.id;
+      } else {
+        const newProjectData = {
+          name: String(projectData.name),
+          description: projectData.description || null,
+          status: "active",
+          userId: userId,
+          createdAt: now,
+          updatedAt: now
+        };
+        const docRef = await addDoc(collection(db, "projects"), newProjectData);
+        return docRef.id;
+      }
+    } catch (e) {
+      console.error("Project Upsert error:", e);
+      return null;
     }
   };
 
@@ -149,21 +187,33 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
     try {
       const qOrders = query(collection(db, "orders"), where("userId", "==", user.uid), limit(20));
       const qClients = query(collection(db, "clients"), where("userId", "==", user.uid), limit(20));
+      const qProjects = query(collection(db, "projects"), where("userId", "==", user.uid), limit(20));
       
-      const [snapOrders, snapClients] = await Promise.all([getDocs(qOrders), getDocs(qClients)]);
+      const [snapOrders, snapClients, snapProjects] = await Promise.all([getDocs(qOrders), getDocs(qClients), getDocs(qProjects)]);
       
       const existingOrders = snapOrders.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const existingClients = snapClients.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+      const existingProjects = snapProjects.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
 
       const result = await processUniversalInput(
         input, 
         existingOrders, 
         existingClients.map((c: any) => `Client: ${c.name}${c.aliases ? ` (Aliase: ${c.aliases.join(', ')})` : ''}, Info: ${c.telefon || ''} ${c.email || ''} ${c.insights || ''}`).join('\n'),
+        existingProjects.map((p: any) => `Project: ${p.name}, Info: ${p.description || ''}`).join('\n'),
         userSettings
       ); 
       
       setAiResponse(result.text_response); // NEU: Speichere Antwort
       toast(result.text_response, { icon: "🧠" });
+
+      // TTS (Text-to-Speech)
+      if ('speechSynthesis' in window && ttsEnabled) {
+        // Stop any currently playing audio
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(result.text_response);
+        utterance.lang = userSettings.recognitionLanguage || 'de-DE';
+        window.speechSynthesis.speak(utterance);
+      }
 
       if (result.intent === 'query') {
         if (onQuery && result.query_data) {
@@ -206,12 +256,13 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
 
       if (result.intent === 'create' && result.create_data && Array.isArray(result.create_data)) {
         const clientId = await upsertClient(result.client_data, user.uid);
+        const projectId = await upsertProject(result.project_data, user.uid);
         
         const duplicates = result.create_data.filter((d: any) => d.duplicate_check?.is_potential_duplicate);
         const novel = result.create_data.filter((d: any) => !d.duplicate_check?.is_potential_duplicate);
 
         for (const orderData of novel) {
-          await executeCreateOrder(rawInputToOrderData(orderData, input, user.uid, clientId));
+          await executeCreateOrder(rawInputToOrderData(orderData, input, user.uid, clientId, projectId));
         }
 
         if (duplicates.length > 0) {
@@ -221,7 +272,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
             reason: firstDup.duplicate_check.reason,
             similarOrderId: firstDup.duplicate_check.similarOrderId
           });
-          setPendingOrder({ input, existingOrders, structuredData: firstDup, clientId });
+          setPendingOrder({ input, existingOrders, structuredData: firstDup, clientId, projectId });
           setIsProcessing(false);
           return;
         }
@@ -238,12 +289,14 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
     }
   };
 
-  const rawInputToOrderData = (create_data: any, originalInput: string, userId: string, clientId: string | null) => {
+  const rawInputToOrderData = (create_data: any, originalInput: string, userId: string, clientId: string | null, projectId: string | null) => {
      return {
         type: create_data.type,
         title: create_data.title,
         clientId: clientId,
         clientName: create_data.clientName || "",
+        projectId: projectId,
+        projectName: create_data.projectName || "",
         description: create_data.description,
         deadline: create_data.deadline,
         priority: create_data.priority,
@@ -260,33 +313,6 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
     setIsProcessing(true);
     try {
       await addDoc(collection(db, "orders"), newOrder);
-      
-      if (autoCalendar && googleToken && newOrder.deadline) {
-        try {
-          const startDateTime = parseISO(newOrder.deadline);
-          
-          if (newOrder.type === 'aufgabe') {
-            await createGoogleTask(googleToken, {
-              title: newOrder.title,
-              notes: `${newOrder.description}${newOrder.clientName ? `\n\nKunde: ${newOrder.clientName}` : ''}`,
-              due: startDateTime.toISOString()
-            });
-            toast.success("Auch in Google Tasks eingetragen!");
-          } else {
-            const endDateTime = addHours(startDateTime, 1);
-            await createGoogleCalendarEvent(googleToken, {
-              summary: `${newOrder.type.toUpperCase()}: ${newOrder.title}`,
-              description: `${newOrder.description}${newOrder.clientName ? `\n\nKunde: ${newOrder.clientName}` : ''}`,
-              start: { dateTime: startDateTime.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-              end: { dateTime: endDateTime.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }
-            });
-            toast.success("Auch im Kalender vermerkt!");
-          }
-        } catch (syncError) {
-          console.error(syncError);
-          toast.error("Auftrag erstellt, aber Google Sync fehlgeschlagen.");
-        }
-      }
 
       setInput("");
       onOrderCreated();
@@ -303,21 +329,21 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
   return (
     <div className="bento-gradient min-h-[220px] flex flex-col justify-between overflow-hidden">
       <div>
-        <h3 className="text-emerald-400 font-semibold mb-1 uppercase text-xs tracking-wider">Schnellerfassung</h3>
-        <p className="text-2xl font-light text-white mb-6">Wie kann ich helfen?</p>
+        <h3 className="text-accent-400 font-semibold mb-1 uppercase text-xs tracking-wider">Schnellerfassung</h3>
+        <p className="text-2xl font-light text-slate-900 dark:text-white mb-6">Wie kann ich helfen?</p>
       </div>
       
       <div className="relative group">
         <Textarea
           placeholder="z.B. Sprachnotizen, Chat-Auszüge oder direkte Texte..."
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          className="min-h-[160px] bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-600 rounded-2xl md:resize-y resize-none pr-12 focus:ring-emerald-500/20 focus:border-emerald-500/30 transition-all"
+          onChange={(e) => { setInput(e.target.value); setWasVoiceInput(false); }}
+          className="min-h-[160px] bg-slate-50/40 dark:bg-slate-950/40 border-slate-300/50 dark:border-slate-700/50 text-slate-800 dark:text-slate-200 placeholder:text-slate-600 rounded-2xl md:resize-y resize-none pr-12 focus:ring-accent-500/20 focus:border-accent-500/30 transition-all"
         />
         <div className="absolute right-3 top-3">
           <div className={cn(
              "w-2 h-2 rounded-full transition-all duration-500",
-             isListening ? "bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+             isListening ? "bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" : "bg-accent-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
           )} />
         </div>
       </div>
@@ -325,13 +351,13 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
       <div className="flex items-center justify-between mt-4 mb-2">
         <div className="flex items-center space-x-2">
           <Switch 
-            id="auto-calendar" 
-            checked={autoCalendar} 
-            onCheckedChange={setAutoCalendar}
-            className="data-[state=checked]:bg-emerald-500"
+            id="tts-enabled" 
+            checked={ttsEnabled} 
+            onCheckedChange={setTtsEnabled}
+            className="data-[state=checked]:bg-accent-500"
           />
-          <Label htmlFor="auto-calendar" className="text-[10px] uppercase font-bold text-slate-500 cursor-pointer flex items-center gap-1.5">
-            <CalendarPlus className="w-3 h-3" /> In Google Tasks / Kalender synchronisieren
+          <Label htmlFor="tts-enabled" className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-500 cursor-pointer flex items-center gap-1.5">
+            <Volume2 className="w-3 h-3" /> Antwort als Sprache
           </Label>
         </div>
       </div>
@@ -345,7 +371,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
             "rounded-xl h-12 w-12 shrink-0 transition-all",
             isListening 
               ? "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20" 
-              : "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+              : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:bg-slate-700 hover:text-slate-800 dark:text-slate-200"
           )}
         >
           {isListening ? <StopCircle className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
@@ -353,7 +379,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
         <Button 
           onClick={handleSubmit} 
           disabled={isProcessing || !input.trim()}
-          className="flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold gap-3 transition-all disabled:bg-slate-800 disabled:text-slate-600"
+          className="flex-1 h-12 rounded-xl bg-accent-500 hover:bg-accent-400 text-slate-950 font-bold gap-3 transition-all disabled:bg-white dark:bg-slate-800 disabled:text-slate-600"
         >
           {isProcessing ? (
             <Loader2 className="w-5 h-5 animate-spin" />
@@ -366,31 +392,24 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
         </Button>
       </div>
 
-      {/* KI Antwort Dialog */}
-      <AlertDialog open={!!aiResponse} onOpenChange={() => setAiResponse(null)}>
-        <AlertDialogContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-bento">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-emerald-400 font-bold uppercase tracking-wider text-sm flex items-center gap-2">
-              <Sparkles className="w-4 h-4" /> Analyse-Ergebnis
-            </AlertDialogTitle>
-          </AlertDialogHeader>
-          <div className="text-slate-200 text-sm py-4 leading-relaxed whitespace-pre-wrap">
-            {aiResponse}
-          </div>
-          <AlertDialogFooter>
-             <Button onClick={() => setAiResponse(null)} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold">Verstanden</Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {aiResponse && (
+        <div className="mt-4 p-4 bg-accent-950/30 border border-accent-900/50 rounded-2xl">
+          <h4 className="text-accent-400 font-bold text-xs uppercase tracking-wider mb-2 flex items-center gap-2">
+            <Sparkles className="w-3 h-3" /> Agent Antwort
+          </h4>
+          <p className="text-slate-800 dark:text-slate-200 text-sm whitespace-pre-wrap">{aiResponse}</p>
+        </div>
+      )}
 
+      {/* Dubletten-Check Dialog */}
       <AlertDialog open={!!duplicateCheck} onOpenChange={() => { setDuplicateCheck(null); setPendingOrder(null); }}>
-        <AlertDialogContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-bento max-w-md">
+        <AlertDialogContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-bento max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-orange-400 font-bold uppercase tracking-wider text-sm flex items-center gap-2">
               <AlertCircle className="w-4 h-4" /> Dubletten-Check
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-400 text-sm leading-relaxed pt-2">
-              <div className="p-3 bg-slate-950/50 rounded-xl border border-slate-800 mb-4 italic text-xs text-slate-300">
+            <AlertDialogDescription className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed pt-2">
+              <div className="p-3 bg-slate-50/50 dark:bg-slate-950/50 rounded-xl border border-slate-200 dark:border-slate-800 mb-4 italic text-xs text-slate-600 dark:text-slate-300">
                 "{duplicateCheck?.reason}"
               </div>
               Wie möchtest du mit dieser Eingabe verfahren?
@@ -422,7 +441,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
                   }
                 }
               }}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold h-11 rounded-xl text-xs uppercase tracking-tight"
+              className="w-full bg-blue-600 hover:bg-blue-500 text-slate-900 dark:text-white font-bold h-11 rounded-xl text-xs uppercase tracking-tight"
             >
               Bestehenden Auftrag aktualisieren
             </Button>
@@ -434,7 +453,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
                   await executeCreateOrder(rawInputToOrderData(pendingOrder.structuredData, pendingOrder.input, user!.uid, pendingOrder.clientId));
                 }
               }}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold h-11 rounded-xl text-xs uppercase tracking-tight"
+              className="w-full bg-accent-600 hover:bg-accent-500 text-slate-900 dark:text-white font-bold h-11 rounded-xl text-xs uppercase tracking-tight"
             >
               Neu anlegen (Separater Eintrag)
             </Button>
@@ -445,7 +464,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
                 setDuplicateCheck(null);
                 setPendingOrder(null);
               }}
-              className="w-full bg-transparent border-slate-800 text-slate-500 hover:text-slate-300 h-11 rounded-xl text-xs uppercase tracking-tight"
+              className="w-full bg-transparent border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-500 hover:text-slate-600 dark:text-slate-300 h-11 rounded-xl text-xs uppercase tracking-tight"
             >
               Vorgang abbrechen
             </Button>
@@ -454,12 +473,12 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
       </AlertDialog>
 
       <AlertDialog open={!!pendingAction} onOpenChange={() => setPendingAction(null)}>
-        <AlertDialogContent className="bg-slate-900 border-slate-800 text-slate-100 rounded-bento max-w-md">
+        <AlertDialogContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-bento max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-red-400 font-bold uppercase tracking-wider text-sm flex items-center gap-2">
               <AlertCircle className="w-4 h-4" /> Sicherheitsabfrage
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-400 text-sm leading-relaxed pt-2">
+            <AlertDialogDescription className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed pt-2">
               {pendingAction?.intent === 'delete_record' 
                 ? `Möchtest du den ${pendingAction?.data.target_type === 'order' ? 'Auftrag' : 'Kunden'} "${pendingAction?.data.primary_name}" wirklich unwiderruflich löschen?`
                 : `Möchtest du "${pendingAction?.data.secondary_name}" wirklich in "${pendingAction?.data.primary_name}" mergen?`
@@ -467,7 +486,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <Button variant="outline" onClick={() => setPendingAction(null)} className="text-slate-400 bg-transparent border-slate-700 hover:bg-slate-800">Abbrechen</Button>
+            <Button variant="outline" onClick={() => setPendingAction(null)} className="text-slate-500 dark:text-slate-400 bg-transparent border-slate-300 dark:border-slate-700 hover:bg-white dark:bg-slate-800">Abbrechen</Button>
             <Button 
                 onClick={async () => {
                     setIsProcessing(true);
@@ -527,7 +546,7 @@ export default function OrderInput({ onOrderCreated, onQuery }: { onOrderCreated
                         setIsProcessing(false);
                     }
                 }}
-                className="bg-red-600 hover:bg-red-500 text-white font-bold"
+                className="bg-red-600 hover:bg-red-500 text-slate-900 dark:text-white font-bold"
             >
               Ja, ausführen
             </Button>

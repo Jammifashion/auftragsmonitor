@@ -48,6 +48,17 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.userId);
     }
 
+    // Projects Collection
+    match /projects/{projectId} {
+      allow read, list: if isOwner(resource.data.userId);
+      allow create: if isWhitelisted() && 
+                      request.resource.data.userId == request.auth.uid &&
+                      request.resource.data.name is string;
+      allow update: if isOwner(resource.data.userId) && 
+                      request.resource.data.updatedAt == request.time;
+      allow delete: if isOwner(resource.data.userId);
+    }
+
     // Users Collection (Settings)
     match /users/{userId} {
       allow read, write: if isWhitelisted() && request.auth.uid == userId;

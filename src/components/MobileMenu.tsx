@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, ShoppingCart, Settings, LogOut, X } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Settings, LogOut, X, Zap } from "lucide-react";
+
 import { useAuth } from "../AuthContext";
 import { cn } from "../lib/utils";
 
@@ -16,16 +17,17 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   if (!isOpen) return null;
 
   const menuItems = [
-    { icon: LayoutDashboard, label: "Dashboard", path: "/" },
+    { icon: Zap, label: "Assistent", path: "/" },
+    { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
     { icon: ShoppingCart, label: "Aufträge", path: "/orders" },
     { icon: Settings, label: "Settings", path: "/settings" },
   ];
 
   return (
-    <div className="fixed inset-0 bg-slate-950 z-50 flex flex-col p-6">
+    <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 z-50 flex flex-col p-6">
       <div className="flex justify-between items-center mb-12">
-        <h2 className="text-emerald-400 font-bold uppercase tracking-widest text-sm">Menü</h2>
-        <button onClick={onClose} className="p-2 text-slate-400 hover:text-white">
+        <h2 className="text-accent-400 font-bold uppercase tracking-widest text-sm">Menü</h2>
+        <button onClick={onClose} className="p-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white">
           <X className="w-8 h-8" />
         </button>
       </div>
@@ -41,8 +43,8 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
               className={cn(
                 "flex items-center gap-4 text-xl font-bold py-4 px-6 rounded-xl transition-all",
                 isActive 
-                  ? "bg-slate-800 text-emerald-400" 
-                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                  ? "bg-white dark:bg-slate-800 text-accent-400" 
+                  : "text-slate-500 dark:text-slate-400 hover:bg-white dark:bg-slate-800 hover:text-slate-800 dark:text-slate-200"
               )}
             >
               <item.icon className="w-8 h-8" />
@@ -52,10 +54,10 @@ export default function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
         })}
       </nav>
 
-      <div className="pt-8 border-t border-slate-800">
+      <div className="pt-8 border-t border-slate-200 dark:border-slate-800">
         <button
           onClick={() => { logout(); onClose(); }}
-          className="flex items-center gap-4 text-xl font-bold text-red-400 py-4 px-6 rounded-xl w-full hover:bg-slate-800"
+          className="flex items-center gap-4 text-xl font-bold text-red-400 py-4 px-6 rounded-xl w-full hover:bg-white dark:bg-slate-800"
         >
           <LogOut className="w-8 h-8" />
           Logout
