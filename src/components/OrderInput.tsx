@@ -262,7 +262,7 @@ export default function OrderInput({ onOrderCreated, onQuery, onAiResponse }: { 
           const novel = result.create_data.filter((d: any) => !d.duplicate_check?.is_potential_duplicate);
 
           for (const orderData of novel) {
-            await executeCreateOrder(rawInputToOrderData(orderData, input, user.uid, clientId, projectId));
+            await executeCreateOrder(rawInputToOrderData(orderData, input, user.uid, clientId, projectId, result));
           }
 
           if (duplicates.length > 0) {
@@ -272,7 +272,7 @@ export default function OrderInput({ onOrderCreated, onQuery, onAiResponse }: { 
               reason: firstDup.duplicate_check.reason,
               similarOrderId: firstDup.duplicate_check.similarOrderId
             });
-            setPendingOrder({ input, existingOrders, structuredData: firstDup, clientId, projectId });
+            setPendingOrder({ input, existingOrders, structuredData: firstDup, clientId, projectId, result });
             setIsProcessing(false);
             return;
           }
@@ -294,14 +294,14 @@ export default function OrderInput({ onOrderCreated, onQuery, onAiResponse }: { 
     }
   };
 
-  const rawInputToOrderData = (create_data: any, originalInput: string, userId: string, clientId: string | null, projectId: string | null) => {
+  const rawInputToOrderData = (create_data: any, originalInput: string, userId: string, clientId: string | null, projectId: string | null, result: any) => {
      return {
         type: create_data.type,
         title: create_data.title,
         clientId: clientId,
-        clientName: create_data.clientName || "",
+        clientName: create_data.clientName || result.client_data?.name || "",
         projectId: projectId,
-        projectName: create_data.projectName || "",
+        projectName: create_data.projectName || result.project_data?.name || "",
         description: create_data.description,
         deadline: create_data.deadline,
         priority: create_data.priority,
@@ -451,7 +451,7 @@ export default function OrderInput({ onOrderCreated, onQuery, onAiResponse }: { 
               onClick={async () => {
                 if (pendingOrder) {
                   setDuplicateCheck(null);
-                  await executeCreateOrder(rawInputToOrderData(pendingOrder.structuredData, pendingOrder.input, user!.uid, pendingOrder.clientId, pendingOrder.projectId || null));
+                  await executeCreateOrder(rawInputToOrderData(pendingOrder.structuredData, pendingOrder.input, user!.uid, pendingOrder.clientId, pendingOrder.projectId || null, pendingOrder.result));
                 }
               }}
               className="w-full bg-accent-600 hover:bg-accent-500 text-slate-900 dark:text-white font-bold h-11 rounded-xl text-xs uppercase tracking-tight"

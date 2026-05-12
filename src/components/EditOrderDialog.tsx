@@ -21,9 +21,12 @@ export default function EditOrderDialog({ order, onClose, onUpdated }: { order: 
   const [type, setType] = useState(order.type || "order");
   const [status, setStatus] = useState(order.status || "pending");
   const [priority, setPriority] = useState(order.priority || "medium");
+  const [projectName, setProjectName] = useState(order.projectName || "");
+  const [projectId, setProjectId] = useState(order.projectId || "");
   const [isSaving, setIsSaving] = useState(false);
 
   const [allClients, setAllClients] = useState<any[]>([]);
+  const [allProjects, setAllProjects] = useState<any[]>([]);
   const [showClientSuggestions, setShowClientSuggestions] = useState(false);
   const [clientSearch, setClientSearch] = useState(order.clientName || "");
 
@@ -38,7 +41,30 @@ export default function EditOrderDialog({ order, onClose, onUpdated }: { order: 
         console.error("Error fetching clients:", e);
       }
     };
+
+    const fetchProjects = async () => {
+      if (!user) return;
+      try {
+        const q = query(collection(db, "projects"), where("userId", "==", user.uid), orderBy("name"));
+        const snap = await getDocs(q);
+        const projectsData = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+        setAllProjects(projectsData);
+        
+        // If projectId exists, resolve the name from our fetched projects list
+        if (order.projectId || projectId) {
+          const targetId = projectId || order.projectId;
+          const match = projectsData.find(p => p.id === targetId);
+          if (match) {
+            setProjectName(match.name);
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching projects:", e);
+      }
+    };
+
     fetchClients();
+    fetchProjects();
   }, [user]);
 
   const handleSave = async () => {
@@ -52,6 +78,8 @@ export default function EditOrderDialog({ order, onClose, onUpdated }: { order: 
         type,
         status,
         priority,
+        projectName,
+        projectId,
         updatedAt: serverTimestamp()
       });
       toast.success("Änderungen gespeichert");
@@ -150,6 +178,36 @@ export default function EditOrderDialog({ order, onClose, onUpdated }: { order: 
           </div>
 
           <div className="grid gap-2">
+            <Label className="text-slate-500 dark:text-slate-400">Projekt</Label>
+            <Select 
+              key={`select-project-${allProjects.length}`}
+              value={projectId || "none"} 
+              onValueChange={(val) => {
+                setProjectId(val === "none" ? "" : val);
+                const p = allProjects.find(pro => pro.id === val);
+                setProjectName(p ? p.name : "");
+              }}
+            >
+              <SelectTrigger className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
+                <span className="flex-1 text-left truncate">
+                  {projectId && projectId !== "none" 
+                    ? projectName || projectId
+                    : "Projekt wählen..."}
+                </span>
+              </SelectTrigger>
+              <SelectContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200">
+                <SelectItem value="none">Kein Projekt</SelectItem>
+                {projectId && !allProjects.some(p => p.id === projectId) && (
+                  <SelectItem value={projectId}>{projectName || "Lädt..."}</SelectItem>
+                )}
+                {allProjects.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid gap-2">
             <Label className="text-slate-500 dark:text-slate-400">Beschreibung</Label>
             <Textarea 
               value={description} 
@@ -162,7 +220,11 @@ export default function EditOrderDialog({ order, onClose, onUpdated }: { order: 
             <div className="grid gap-2">
               <Label className="text-slate-500 dark:text-slate-400">Typ</Label>
               <Select value={type} onValueChange={setType}>
-                <SelectTrigger className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
+                  <span className="flex-1 text-left truncate">
+                    {type === 'order' ? 'Kunde (Order)' : type === 'aufgabe' ? 'Aufgabe (KI)' : type === 'idee' ? 'Idee / Sonstiges' : type === 'callback' ? 'Rückruf' : type === 'structure' ? 'Struktur / Intern' : type}
+                  </span>
+                </SelectTrigger>
                 <SelectContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200">
                   <SelectItem value="order">Kunde (Order)</SelectItem>
                   <SelectItem value="aufgabe">Aufgabe (KI)</SelectItem>
@@ -175,7 +237,11 @@ export default function EditOrderDialog({ order, onClose, onUpdated }: { order: 
             <div className="grid gap-2">
               <Label className="text-slate-500 dark:text-slate-400">Status</Label>
               <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
+                  <span className="flex-1 text-left truncate">
+                    {status === 'pending' ? 'Offen' : status === 'completed' ? 'Abgeschlossen' : status}
+                  </span>
+                </SelectTrigger>
                 <SelectContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200">
                   <SelectItem value="pending">Offen</SelectItem>
                   <SelectItem value="completed">Abgeschlossen</SelectItem>

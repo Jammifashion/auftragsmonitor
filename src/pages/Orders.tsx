@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { createGoogleCalendarEvent } from "../services/calendarService";
 import { mergeOrders } from "../services/geminiService";
 import EditOrderDialog from "../components/EditOrderDialog";
+import EditProjectDialog from "../components/EditProjectDialog";
 import AppHeader from "../components/AppHeader";
 import MobileMenu from "../components/MobileMenu";
 
@@ -158,6 +159,8 @@ export default function Orders() {
   const [queryState, setQueryState] = useState<any>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [editingOrder, setEditingOrder] = useState<any>(null);
+  const [editingProject, setEditingProject] = useState<any>(null);
+  const [deletingProject, setDeletingProject] = useState<any>(null);
   const [typeFilter, setTypeFilter] = useState<'all' | 'order' | 'aufgabe' | 'idee' | 'callback' | 'projekt'>('all');
   const [projectFilter, setProjectFilter] = useState<string>('all');
   const [showCompleted, setShowCompleted] = useState(false);
@@ -182,9 +185,9 @@ export default function Orders() {
     const fetchClient = async () => {
       if (detailOrder?.clientId) {
         try {
-          const snap = await getDocs(query(collection(db, "clients"), where("__name__", "==", detailOrder.clientId)));
-          if (!snap.empty) {
-            setDetailClient(snap.docs[0].data());
+          const snap = await getDoc(doc(db, "clients", detailOrder.clientId));
+          if (snap.exists()) {
+            setDetailClient(snap.data());
           } else {
             setDetailClient(null);
           }
@@ -330,6 +333,19 @@ export default function Orders() {
     }
   };
 
+  const deleteProject = async (projectId: string) => {
+    try {
+      await deleteDoc(doc(db, "projects", projectId));
+      toast.success("Projekt gelöscht");
+      setDeletingProject(null);
+      fetchOrders();
+    } catch (error: any) {
+      console.error("Delete Project Error:", error);
+      toast.error(`Fehler beim Löschen des Projekts: ${error?.message || "Unbekannt"}`);
+      setDeletingProject(null);
+    }
+  };
+
   const addToCalendar = async (order: any) => {
     if (!googleToken) {
       toast.error("Kalender Zugriff erforderlich. Bitte logge dich erneut ein.");
@@ -423,7 +439,9 @@ export default function Orders() {
                 {typeFilter !== 'projekt' && (
                   <Select value={projectFilter} onValueChange={setProjectFilter}>
                     <SelectTrigger className="w-[180px] bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-xs font-bold tracking-widest text-slate-500 dark:text-slate-400">
-                      <SelectValue placeholder="Projekt Filter" />
+                      <span className="flex-1 text-left truncate">
+                        {projectFilter === "all" ? "Projekt Filter" : projects.find(p => p.id === projectFilter)?.name || "Projekt Filter"}
+                      </span>
                     </SelectTrigger>
                     <SelectContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200">
                       <SelectItem value="all">Alle Projekte</SelectItem>
@@ -457,15 +475,32 @@ export default function Orders() {
           ) : typeFilter === 'projekt' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {projects.map(project => (
-                <div key={project.id} className="bento-card border-amber-500/20 flex flex-col transition-all hover:scale-[1.02]">
+                <div key={project.id} className="bento-card border-amber-500/20 flex flex-col transition-all group relative">
                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{project.name}</h3>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 truncate">{project.name}</h3>
                       </div>
-                      <Badge variant="outline" className="border-amber-500/30 text-amber-400">Projekt</Badge>
+                      <Badge variant="outline" className="border-amber-500/30 text-amber-400 shrink-0 ml-2">Projekt</Badge>
                    </div>
                    <div className="space-y-2 mb-4 flex-1">
                      {project.description && <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{project.description}</p>}
+                   </div>
+                   
+                   <div className="mt-4 flex items-center justify-end gap-2 pt-4 border-t border-slate-800/20">
+                      <button 
+                        onClick={() => setEditingProject(project)}
+                        className="text-slate-500 hover:text-accent-400 transition-colors p-2"
+                        title="Bearbeiten"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => setDeletingProject(project)}
+                        className="text-slate-500 hover:text-red-400 transition-colors p-2"
+                        title="Löschen"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                    </div>
                 </div>
               ))}
@@ -535,7 +570,9 @@ export default function Orders() {
                   <div className="mt-6 flex items-center justify-between pt-4 border-t border-slate-800/50">
                     <Select value={order.status} onValueChange={(val) => updateStatus(order.id, val)}>
                       <SelectTrigger className="w-[110px] h-8 bg-white dark:bg-slate-800 border-none rounded-lg text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 focus:ring-0">
-                        <SelectValue />
+                        <span className="flex-1 text-left truncate">
+                          {order.status === 'pending' ? 'Offen' : order.status === 'in_progress' ? 'Laufend' : order.status === 'completed' ? 'Fertig' : order.status === 'cancelled' ? 'Storno' : order.status}
+                        </span>
                       </SelectTrigger>
                       <SelectContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300">
                         <SelectItem value="pending">Offen</SelectItem>
@@ -617,14 +654,31 @@ export default function Orders() {
 
       {/* Detail Dialog */}
       <Dialog open={!!detailOrder} onOpenChange={() => setDetailOrder(null)}>
-        <DialogContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-bento max-w-lg">
+        <DialogContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-bento sm:max-w-xl w-full">
           <DialogHeader>
              <DialogTitle className="text-accent-400 font-bold uppercase tracking-wider text-sm">Auftrags-Details</DialogTitle>
           </DialogHeader>
           <div className="space-y-6 pt-4">
-            <div className="flex flex-col gap-1">
-              <p className="text-2xl font-bold text-slate-900 dark:text-white leading-tight">{detailOrder?.title}</p>
-              <p className="text-accent-400 font-semibold tracking-wide">{detailClient?.name || detailOrder?.clientName}</p>
+            <div className="flex justify-between items-start">
+              <div className="flex flex-col gap-1 flex-1 pr-4">
+                <p className="text-2xl font-bold text-slate-900 dark:text-white leading-tight">{detailOrder?.title}</p>
+                <p className="text-accent-400 font-semibold tracking-wide">{detailClient?.name || detailOrder?.clientName}</p>
+                {(detailOrder?.projectName || detailOrder?.projectId) && (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Badge variant="outline" className="text-[10px] uppercase tracking-widest py-0 border-amber-500/30 bg-amber-500/10 text-amber-500">
+                      Projekt: {detailOrder.projectId ? (projects.find(p => p.id === detailOrder.projectId)?.name || detailOrder.projectName) : detailOrder.projectName}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-2 shrink-0 items-end">
+                 <Badge variant="outline" className="text-[10px] uppercase border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-500">
+                    {detailOrder?.type}
+                 </Badge>
+                 {detailOrder?.priority === 'high' && (
+                   <Badge className="bg-red-500/10 text-red-500 border-none text-[9px] uppercase">Prio: Hoch</Badge>
+                 )}
+              </div>
             </div>
 
             {detailOrder?.structured_details ? (
@@ -640,7 +694,7 @@ export default function Orders() {
                   <p className="text-[10px] uppercase font-bold text-accent-500 mb-1 tracking-widest flex items-center gap-2">
                     <Clock className="w-3 h-3" /> Nächster Schritt
                   </p>
-                  <p className="text-sm text-accent-50 font-bold">{detailOrder.structured_details.naechster_schritt}</p>
+                  <p className="text-sm text-slate-800 dark:text-slate-100 font-bold">{detailOrder.structured_details.naechster_schritt}</p>
                 </div>
 
                 {/* Background */}
@@ -672,7 +726,7 @@ export default function Orders() {
               </div>
             )}
 
-            <div className="flex items-center justify-between pt-4 border-t border-slate-800/50">
+            <div className="flex flex-wrap items-center justify-between pt-4 border-t border-slate-800/50 gap-4">
               <div className="flex gap-4">
                 <div className="flex flex-col">
                   <p className="text-[9px] uppercase font-bold text-slate-600">Deadline</p>
@@ -683,7 +737,7 @@ export default function Orders() {
                   <Badge variant="outline" className="text-[9px] py-0 h-4 border-slate-200 dark:border-slate-800 text-accent-400 capitalize">{detailOrder?.status}</Badge>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 justify-end">
                 <Button 
                   variant="ghost"
                   size="icon"
@@ -702,9 +756,11 @@ export default function Orders() {
                 </Button>
                 <Button 
                   onClick={() => { setCalendarOrder(detailOrder); setDetailOrder(null); }}
-                  className="bg-accent-600 hover:bg-accent-500 font-bold h-9 text-xs"
+                  className="bg-accent-600 hover:bg-accent-500 text-slate-900 font-bold h-9 text-xs px-3 sm:px-4"
                 >
-                  <CalendarCheck className="w-3.5 h-3.5 mr-2" /> Kalendereintrag
+                  <CalendarCheck className="w-3.5 h-3.5 mr-1 sm:mr-2" /> 
+                  <span className="hidden sm:inline">Kalender</span>
+                  <span className="sm:hidden">Kal.</span>
                 </Button>
               </div>
             </div>
@@ -720,6 +776,15 @@ export default function Orders() {
           onUpdated={fetchOrders}
         />
       )}
+
+      {/* Edit Project Dialog */}
+      {editingProject && (
+        <EditProjectDialog
+          project={editingProject}
+          onClose={() => setEditingProject(null)}
+          onUpdated={fetchOrders}
+        />
+      )}
       
       <AlertDialog open={!!deletingOrderId} onOpenChange={(open) => !open && setDeletingOrderId(null)}>
         <AlertDialogContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200">
@@ -732,6 +797,22 @@ export default function Orders() {
           <AlertDialogFooter>
             <AlertDialogCancel variant="outline" size="default" className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white hover:bg-slate-200 dark:bg-slate-700 hover:text-slate-900 dark:text-white">Abbrechen</AlertDialogCancel>
             <AlertDialogAction onClick={() => deletingOrderId && deleteOrder(deletingOrderId)} className="bg-red-600 text-slate-900 dark:text-white hover:bg-red-500">Löschen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Project Confirmation */}
+      <AlertDialog open={!!deletingProject} onOpenChange={(open) => !open && setDeletingProject(null)}>
+        <AlertDialogContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-slate-900 dark:text-white">Projekt unwiderruflich löschen?</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-500 dark:text-slate-400">
+              Diese Aktion kann nicht rückgängig gemacht werden. Alle Verknüpfungen in Aufträgen bleiben als Text erhalten, aber das Projekt selbst wird entfernt.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white hover:bg-slate-200">Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deletingProject && deleteProject(deletingProject.id)} className="bg-red-600 text-slate-900 dark:text-white hover:bg-red-500">Löschen</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

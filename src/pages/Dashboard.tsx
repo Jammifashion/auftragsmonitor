@@ -147,6 +147,7 @@ export default function Dashboard() {
   const [detailOrder, setDetailOrder] = useState<any>(null);
   const [detailClient, setDetailClient] = useState<any>(null);
   const [detailClientView, setDetailClientView] = useState<any>(null);
+  const [detailProjectView, setDetailProjectView] = useState<any>(null);
   const [calendarOrder, setCalendarOrder] = useState<any>(null);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [editingOrder, setEditingOrder] = useState<any>(null);
@@ -162,9 +163,9 @@ export default function Dashboard() {
     const fetchClient = async () => {
       if (detailOrder?.clientId) {
         try {
-          const snap = await getDocs(query(collection(db, "clients"), where("__name__", "==", detailOrder.clientId)));
-          if (!snap.empty) {
-            setDetailClient(snap.docs[0].data());
+          const snap = await getDoc(doc(db, "clients", detailOrder.clientId));
+          if (snap.exists()) {
+            setDetailClient(snap.data());
           } else {
             setDetailClient(null);
           }
@@ -737,9 +738,88 @@ export default function Dashboard() {
           </div>
         )
       ) : (
+        detailProjectView ? (
+          <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="flex items-center justify-between bg-slate-100/50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+               <button 
+                 onClick={() => setDetailProjectView(null)}
+                 className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white transition-colors text-xs font-bold uppercase tracking-tight"
+               >
+                 ← Alle Projekte 
+               </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+               {/* Project Info Card */}
+               <div className="lg:col-span-1 bento-card p-6 border-amber-500/20">
+                  <div className="mb-6">
+                     <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">{detailProjectView.name}</h3>
+                  </div>
+                  
+                  <div className="space-y-4">
+                     <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest">Beschreibung</p>
+                        <p className="text-sm text-slate-600 dark:text-slate-300">{detailProjectView.description || "Keine Beschreibung vorhanden."}</p>
+                     </div>
+                  </div>
+               </div>
+
+               {/* Open Tasks for Project */}
+               <div className="lg:col-span-2 bento-card p-6 border-amber-500/10 flex flex-col min-h-[400px]">
+                  <h3 className="text-slate-900 dark:text-white font-bold mb-4 flex items-center gap-2">
+                     <ListTodo className="w-4 h-4 text-amber-400" /> Offene Einträge (Projekt)
+                  </h3>
+                  
+                  <div className="space-y-3">
+                     {recentEntries.filter(o => {
+                       const isLinkedById = o.projectId === detailProjectView.id;
+                       const isLinkedByName = o.projectName?.toLowerCase().includes(detailProjectView.name.toLowerCase());
+                       return (isLinkedById || isLinkedByName) && o.status !== 'completed';
+                     }).length > 0 ? (
+                       recentEntries.filter(o => {
+                         const isLinkedById = o.projectId === detailProjectView.id;
+                         const isLinkedByName = o.projectName?.toLowerCase().includes(detailProjectView.name.toLowerCase());
+                         return (isLinkedById || isLinkedByName) && o.status !== 'completed';
+                       }).map(order => (
+                         <div key={order.id} className="flex items-center justify-between bg-white/50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-800/50 hover:border-amber-500/30 transition-all cursor-pointer group" onClick={() => setDetailOrder(order)}>
+                            <div className="flex items-center gap-4 flex-1 min-w-0 pr-4">
+                               <button 
+                                  onClick={(e) => { e.stopPropagation(); toggleComplete(order.id, order.status); }}
+                                  className="w-6 h-6 rounded-md border border-slate-300 dark:border-slate-700 flex items-center justify-center hover:bg-accent-500/20 hover:border-accent-500 transition-all text-transparent hover:text-accent-500"
+                               >
+                                  <CheckCircle2 className="w-4 h-4" />
+                               </button>
+                               <div className="min-w-0">
+                                  <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 group-hover:text-amber-400 transition-colors truncate">{order.title}</h4>
+                                  <p className="text-xs text-slate-500 dark:text-slate-500 truncate">{order.description}</p>
+                               </div>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                               <Badge variant="outline" className="text-[9px] uppercase border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-500">
+                                  {order.type}
+                               </Badge>
+                               {order.deadline && (
+                                 <div className="text-[10px] font-mono text-slate-500 dark:text-slate-500">
+                                    {format(parseISO(order.deadline), 'dd.MM')}
+                                 </div>
+                               )}
+                            </div>
+                         </div>
+                       ))
+                     ) : (
+                       <div className="flex-1 flex flex-col items-center justify-center text-slate-600 gap-2 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-8">
+                          <CheckCircle2 className="w-8 h-8 opacity-20" />
+                          <p className="text-xs italic">Keine offenen Aufgaben für dieses Projekt.</p>
+                       </div>
+                     )}
+                  </div>
+               </div>
+            </div>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-auto pb-6">
           {projects.map(project => (
-            <div key={project.id} className="bento-card border-amber-500/20 flex flex-col cursor-pointer transition-all hover:scale-[1.02]">
+            <div key={project.id} className="bento-card border-amber-500/20 flex flex-col cursor-pointer transition-all hover:scale-[1.02]" onClick={() => setDetailProjectView(project)}>
                <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{project.name}</h3>
@@ -757,28 +837,36 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+        )
       )}
 
         {/* Detail Dialog */}
         <Dialog open={!!detailOrder} onOpenChange={() => setDetailOrder(null)}>
-          <DialogContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-bento max-w-lg">
+          <DialogContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-bento sm:max-w-xl w-full">
             <DialogHeader>
               <DialogTitle className="text-accent-400 font-bold uppercase tracking-wider text-sm">Auftrags-Details</DialogTitle>
             </DialogHeader>
             <div className="space-y-6 pt-4">
               <div className="flex justify-between items-start">
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1 flex-1 pr-4">
                   <p className="text-2xl font-bold text-slate-900 dark:text-white leading-tight">{detailOrder?.title}</p>
                   <p className="text-accent-400 font-semibold tracking-wide">{detailClient?.name || detailOrder?.clientName}</p>
+                  {(detailOrder?.projectName || detailOrder?.projectId) && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Badge variant="outline" className="text-[10px] uppercase tracking-widest py-0 border-amber-500/30 bg-amber-500/10 text-amber-500">
+                        Projekt: {detailOrder.projectId ? (projects.find((p: any) => p.id === detailOrder.projectId)?.name || detailOrder.projectName) : detailOrder.projectName}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
-                <Button 
-                  size="sm"
-                  variant="outline"
-                  className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white gap-2 h-9"
-                  onClick={() => { setCalendarOrder(detailOrder); setDetailOrder(null); }}
-                >
-                  <CalendarCheck className="w-4 h-4" /> Kalender
-                </Button>
+                <div className="flex flex-col gap-2 shrink-0 items-end">
+                   <Badge variant="outline" className="text-[10px] uppercase border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-500">
+                      {detailOrder?.type}
+                   </Badge>
+                   {detailOrder?.priority === 'high' && (
+                     <Badge className="bg-red-500/10 text-red-500 border-none text-[9px] uppercase">Prio: Hoch</Badge>
+                   )}
+                </div>
               </div>
 
               {detailOrder?.structured_details ? (
@@ -791,7 +879,7 @@ export default function Dashboard() {
                     <p className="text-[10px] uppercase font-bold text-accent-500 mb-1 tracking-widest flex items-center gap-2">
                        <Clock className="w-3 h-3" /> Nächster Schritt
                     </p>
-                    <p className="text-sm text-accent-50 font-bold">{detailOrder.structured_details.naechster_schritt}</p>
+                    <p className="text-sm text-slate-800 dark:text-slate-100 font-bold">{detailOrder.structured_details.naechster_schritt}</p>
                   </div>
                   {detailOrder.structured_details.hintergrund_info && (
                     <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
@@ -819,7 +907,7 @@ export default function Dashboard() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-4 border-t border-slate-800/50">
+              <div className="flex flex-wrap items-center justify-between pt-4 border-t border-slate-800/50 gap-4">
                 <div className="flex gap-4">
                   <div className="flex flex-col">
                     <p className="text-[9px] uppercase font-bold text-slate-600">Deadline</p>
@@ -830,7 +918,7 @@ export default function Dashboard() {
                     <Badge variant="outline" className="text-[9px] py-0 h-4 border-slate-200 dark:border-slate-800 text-accent-400 capitalize">{detailOrder?.status}</Badge>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 justify-end">
                   <Button 
                     variant="ghost"
                     size="icon"
@@ -847,25 +935,28 @@ export default function Dashboard() {
                   >
                     <Edit className="w-4 h-4" />
                   </Button>
-                    <Button 
-                      size="sm"
-                      className={cn(
-                        "font-bold h-9 text-xs transition-all",
-                        detailOrder?.status === 'completed' ? "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400" : "bg-accent-600 hover:bg-accent-500 text-slate-900 dark:text-white"
-                      )}
-                      onClick={() => toggleComplete(detailOrder.id, detailOrder.status)}
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 mr-2" /> 
-                      {detailOrder?.status === 'completed' ? "Erledigt" : "Abschließen"}
-                    </Button>
-                    <Button 
-                      size="sm"
-                      variant="outline"
-                      className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white font-bold h-9 text-xs"
-                      onClick={() => { setCalendarOrder(detailOrder); setDetailOrder(null); }}
-                    >
-                      <CalendarCheck className="w-3.5 h-3.5 mr-2" /> Kalender
-                    </Button>
+                  <Button 
+                    size="sm"
+                    className={cn(
+                      "font-bold h-9 text-xs transition-all px-3 sm:px-4",
+                      detailOrder?.status === 'completed' ? "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400" : "bg-accent-600 hover:bg-accent-500 text-slate-900 dark:text-white"
+                    )}
+                    onClick={() => toggleComplete(detailOrder.id, detailOrder.status)}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 mr-1 sm:mr-2" /> 
+                    <span className="hidden sm:inline">{detailOrder?.status === 'completed' ? "Erledigt" : "Abschließen"}</span>
+                    <span className="sm:hidden">{detailOrder?.status === 'completed' ? "Erledigt" : "Fertig"}</span>
+                  </Button>
+                  <Button 
+                    size="sm"
+                    variant="outline"
+                    className="bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white font-bold h-9 text-xs px-3 sm:px-4"
+                    onClick={() => { setCalendarOrder(detailOrder); setDetailOrder(null); }}
+                  >
+                    <CalendarCheck className="w-3.5 h-3.5 mr-1 sm:mr-2" /> 
+                    <span className="hidden sm:inline">Kalender</span>
+                    <span className="sm:hidden">Kal.</span>
+                  </Button>
                 </div>
               </div>
             </div>

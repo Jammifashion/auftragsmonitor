@@ -226,7 +226,9 @@ export default function Settings() {
                 <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-3">Tone of Voice</label>
                 <Select value={toneOfVoice} onValueChange={setToneOfVoice}>
                   <SelectTrigger className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
-                    <SelectValue placeholder="Wähle den Tonfall" />
+                    <span className="flex-1 text-left truncate">
+                      {toneOfVoice === 'business' ? 'Strikt geschäftlich' : toneOfVoice === 'short' ? 'Kurz & knackig' : toneOfVoice === 'humorous' ? 'Humorvoll' : toneOfVoice}
+                    </span>
                   </SelectTrigger>
                   <SelectContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
                     <SelectItem value="business">Strikt geschäftlich</SelectItem>
@@ -241,7 +243,9 @@ export default function Settings() {
                 <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-3">Spracherkennungs-Sprache</label>
                 <Select value={recognitionLanguage} onValueChange={setRecognitionLanguage}>
                   <SelectTrigger className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
-                    <SelectValue placeholder="Wähle die Sprache" />
+                    <span className="flex-1 text-left truncate">
+                      {recognitionLanguage === 'de-DE' ? 'Deutsch (DE)' : recognitionLanguage === 'en-US' ? 'Englisch (US)' : recognitionLanguage === 'en-GB' ? 'Englisch (UK)' : recognitionLanguage === 'es-ES' ? 'Spanisch' : recognitionLanguage}
+                    </span>
                   </SelectTrigger>
                   <SelectContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
                     <SelectItem value="de-DE">Deutsch (DE)</SelectItem>
@@ -266,7 +270,9 @@ export default function Settings() {
                 <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-3">Standard-Deadline (falls nicht genannt)</label>
                 <Select value={defaultDeadline} onValueChange={setDefaultDeadline}>
                   <SelectTrigger className="bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white md:w-1/2">
-                    <SelectValue placeholder="Standard Deadline festlegen" />
+                    <span className="flex-1 text-left truncate">
+                      {defaultDeadline === '1' ? 'Morgen (1 Tag)' : defaultDeadline === '3' ? 'In 3 Tagen' : defaultDeadline === '7' ? 'In 7 Tagen' : defaultDeadline === '14' ? 'In 14 Tagen' : defaultDeadline === 'none' ? 'Keine Standard-Deadline' : defaultDeadline}
+                    </span>
                   </SelectTrigger>
                   <SelectContent className="bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white">
                     <SelectItem value="1">Morgen (1 Tag)</SelectItem>
