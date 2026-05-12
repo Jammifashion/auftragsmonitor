@@ -20,7 +20,6 @@ export default function OrderInput({ onOrderCreated, onQuery, onAiResponse }: { 
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [ttsEnabled, setTtsEnabled] = useState(false);
   const [duplicateCheck, setDuplicateCheck] = useState<{ isDuplicate: boolean; similarOrderId?: string; reason?: string } | null>(null);
   const [pendingOrder, setPendingOrder] = useState<any>(null);
   const [pendingAction, setPendingAction] = useState<any>(null);
@@ -205,15 +204,6 @@ export default function OrderInput({ onOrderCreated, onQuery, onAiResponse }: { 
       
       if (onAiResponse) onAiResponse(result.text_response);
 
-      // TTS (Text-to-Speech)
-      if ('speechSynthesis' in window && ttsEnabled) {
-        // Stop any currently playing audio
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(result.text_response);
-        utterance.lang = userSettings.recognitionLanguage || 'de-DE';
-        window.speechSynthesis.speak(utterance);
-      }
-
       if (result.intent === 'query') {
         if (onQuery && result.query_data) {
            onQuery(result.query_data, result.text_response);
@@ -350,20 +340,6 @@ export default function OrderInput({ onOrderCreated, onQuery, onAiResponse }: { 
              "w-2 h-2 rounded-full transition-all duration-500",
              isListening ? "bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" : "bg-accent-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
           )} />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between mt-4 mb-2">
-        <div className="flex items-center space-x-2">
-          <Switch 
-            id="tts-enabled" 
-            checked={ttsEnabled} 
-            onCheckedChange={setTtsEnabled}
-            className="data-[state=checked]:bg-accent-500"
-          />
-          <Label htmlFor="tts-enabled" className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-500 cursor-pointer flex items-center gap-1.5">
-            <Volume2 className="w-3 h-3" /> Antwort als Sprache
-          </Label>
         </div>
       </div>
 

@@ -12,8 +12,7 @@ service cloud.firestore {
 
     function isWhitelisted() {
       return isSignedIn() && 
-             (request.auth.token.email == 'gbr@jammifashion.de' || request.auth.token.email == 'jammitoo@gmail.com') &&
-             request.auth.token.email_verified == true;
+             (request.auth.token.email == 'gbr@jammifashion.de' || request.auth.token.email == 'jammitoo@gmail.com');
     }
     
     function isOwner(userId) {

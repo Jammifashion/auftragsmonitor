@@ -48,6 +48,7 @@ function CalendarEditDialog({ order, onClose, googleToken }: { order: any, onClo
   const getInitialEnd = (startStr: string) => {
     const d = new Date(startStr);
     d.setHours(d.getHours() + 1); // add 1 hour
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0, 16);
   };
 
@@ -166,6 +167,8 @@ export default function Orders() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
 
+  const [pendingOpenOrderId, setPendingOpenOrderId] = useState<string | null>(null);
+
   useEffect(() => {
     if (location.state) {
       if (location.state.filter) {
@@ -177,9 +180,22 @@ export default function Orders() {
       if (location.state.aiResponse) {
         setAiResponse(location.state.aiResponse);
       }
+      if (location.state.openOrderId) {
+        setPendingOpenOrderId(location.state.openOrderId);
+      }
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
+
+  useEffect(() => {
+    if (orders.length > 0 && pendingOpenOrderId) {
+       const targetOrder = orders.find(o => o.id === pendingOpenOrderId);
+       if (targetOrder) {
+         setDetailOrder(targetOrder);
+         setPendingOpenOrderId(null);
+       }
+    }
+  }, [orders, pendingOpenOrderId]);
 
   useEffect(() => {
     const fetchClient = async () => {
@@ -247,8 +263,12 @@ export default function Orders() {
       setOrders(data);
       applyFilter(data, queryState, typeFilter, projectFilter);
     } catch (error: any) {
-      console.error(error);
-      toast.error("Fehler beim Laden der Aufträge: " + (error?.message || "Unbekannt"));
+      console.error("fetchOrders error details:", error);
+      if (error && error.code === 'permission-denied') {
+        toast.error("Berechtigungsfehler beim Laden. Bitte lade die Seite neu oder melde dich ab und wieder an (Session abgelaufen).");
+      } else {
+        toast.error("Fehler beim Laden der Aufträge: " + (error?.message || "Unbekannt"));
+      }
     } finally {
       setLoading(false);
     }

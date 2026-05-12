@@ -43,6 +43,7 @@ function CalendarEditDialog({ order, onClose, googleToken }: { order: any, onClo
   const getInitialEnd = (startStr: string) => {
     const d = new Date(startStr);
     d.setHours(d.getHours() + 1);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0, 16);
   };
 

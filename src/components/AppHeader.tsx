@@ -1,5 +1,6 @@
 import { useAuth } from "../AuthContext";
 import { Search, User, Menu } from "lucide-react";
+import NotificationModule from "./NotificationModule";
 
 interface AppHeaderProps {
   onMenuClick: () => void;
@@ -24,6 +25,7 @@ export default function AppHeader({ onMenuClick }: AppHeaderProps) {
         />
       </div>
       <div className="flex items-center gap-3 md:gap-4">
+        <NotificationModule />
         <div className="text-right hidden sm:block">
           <p className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-widest">{user?.displayName?.split(' ')[0]}</p>
           <p className="text-[10px] text-accent-400">Verbunden</p>
