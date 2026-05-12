@@ -31,6 +31,10 @@ export interface ZeroFrictionResponse {
     adresse: string | null;
     zahlungsinfo: string | null;
   } | null;
+  project_data: {
+    name: string;
+    description: string | null;
+  } | null;
   query_data: {
     filter_client: string | null;
     query_type: "order" | "client";
@@ -131,7 +135,6 @@ export const zeroFrictionSchema = {
 
 
 export async function mergeOrders(orders: any[]): Promise<any> {
-    const model = "gemini-2.5-flash";
     const prompt = `
       Merge the following orders into one single, structured, and logical order for a business owner.
       Keep the most important information and combine descriptions if necessary.
@@ -141,19 +144,17 @@ export async function mergeOrders(orders: any[]): Promise<any> {
       
       Return a structured JSON object matching the create_data structure.
     `;
-    const result = await genAI.models.generateContent({
-      model,
+    const response = await genAI.models.generateContent({
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
       },
     });
-    return JSON.parse(result.text);
+    return JSON.parse(response.text || "{}");
   }
   
   export async function processUniversalInput(input: string, existingOrders: any[], clientCtx: string = "", projectCtx: string = "", userSettings?: any): Promise<ZeroFrictionResponse> {
-    const model = "gemini-2.5-flash";
-    
     const ctx = existingOrders.map(o => `ID: ${o.id}, Title: ${o.title}, Client: ${o.clientName || ''}, Project: ${o.projectName || ''}, Type: ${o.type}`).join('\n');
     const today = new Date().toISOString().split('T')[0];
 
@@ -226,26 +227,28 @@ export async function mergeOrders(orders: any[]): Promise<any> {
       6. Wenn intent == 'query':
          - If asking for contact details of a person, set query_type = 'client'.
          - If asking for tasks or filtered lists, set query_type = 'order'.
-      
+         - When responding with list of orders, ALWAYS check the "Existing database context (Orders)" and reference specific orders as [Auftrag: TITLE] in your text_response, so the user can easily identify them.
+
       7. Tone of Voice:
          - Für das Feld 'text_response': ${specificToneInstructions}
+         - Include actionable insight in 'text_response'. If there are pending tasks, call them out.
          
       Always return a valid JSON object matching the requested schema.
     `;
   
-    const result = await genAI.models.generateContent({
-      model,
+    const response = await genAI.models.generateContent({
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: zeroFrictionSchema,
-      },
+      }
     });
   
     try {
-      return JSON.parse(result.text);
+      return JSON.parse(response.text || "{}");
     } catch (e) {
-      console.error("Gemini Parse Error:", result.text);
+      console.error("Gemini Parse Error:", response.text);
       throw new Error("Invalid AI response format");
     }
   }

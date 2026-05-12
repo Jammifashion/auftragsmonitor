@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import ReactMarkdown from 'react-markdown';
 import { Mic, Send, Sparkles, Loader2, StopCircle, CalendarPlus, AlertCircle, Volume2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
@@ -14,7 +15,7 @@ import { parseISO, addHours } from "date-fns";
 import { Switch } from "./ui/switch";
 import { Label } from "./ui/label";
 
-export default function OrderInput({ onOrderCreated, onQuery, hideAiResponseText }: { onOrderCreated: () => void, onQuery?: (queryData: any) => void, hideAiResponseText?: boolean }) {
+export default function OrderInput({ onOrderCreated, onQuery, onAiResponse }: { onOrderCreated: () => void, onQuery?: (queryData: any, aiResponse?: string) => void, onAiResponse?: (response: string) => void }) {
   const { user, googleToken, login } = useAuth();
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -23,7 +24,6 @@ export default function OrderInput({ onOrderCreated, onQuery, hideAiResponseText
   const [duplicateCheck, setDuplicateCheck] = useState<{ isDuplicate: boolean; similarOrderId?: string; reason?: string } | null>(null);
   const [pendingOrder, setPendingOrder] = useState<any>(null);
   const [pendingAction, setPendingAction] = useState<any>(null);
-  const [aiResponse, setAiResponse] = useState<string | null>(null);
   const [userSettings, setUserSettings] = useState<any>({});
   const [wasVoiceInput, setWasVoiceInput] = useState(false);
   
@@ -203,8 +203,7 @@ export default function OrderInput({ onOrderCreated, onQuery, hideAiResponseText
         userSettings
       ); 
       
-      setAiResponse(result.text_response); // NEU: Speichere Antwort
-      toast(result.text_response, { icon: "🧠" });
+      if (onAiResponse) onAiResponse(result.text_response);
 
       // TTS (Text-to-Speech)
       if ('speechSynthesis' in window && ttsEnabled) {
@@ -217,7 +216,7 @@ export default function OrderInput({ onOrderCreated, onQuery, hideAiResponseText
 
       if (result.intent === 'query') {
         if (onQuery && result.query_data) {
-           onQuery(result.query_data);
+           onQuery(result.query_data, result.text_response);
            setInput("");
         }
         setIsProcessing(false);
@@ -249,32 +248,38 @@ export default function OrderInput({ onOrderCreated, onQuery, hideAiResponseText
             intent: result.intent,
             data: result.action_data
         });
-        setAiResponse(result.text_response);
+        if (onAiResponse) onAiResponse(result.text_response);
         setIsProcessing(false);
         return;
       }
 
-      if (result.intent === 'create' && result.create_data && Array.isArray(result.create_data)) {
+      if (result.intent === 'create') {
         const clientId = await upsertClient(result.client_data, user.uid);
         const projectId = await upsertProject(result.project_data, user.uid);
         
-        const duplicates = result.create_data.filter((d: any) => d.duplicate_check?.is_potential_duplicate);
-        const novel = result.create_data.filter((d: any) => !d.duplicate_check?.is_potential_duplicate);
+        if (result.create_data && Array.isArray(result.create_data) && result.create_data.length > 0) {
+          const duplicates = result.create_data.filter((d: any) => d.duplicate_check?.is_potential_duplicate);
+          const novel = result.create_data.filter((d: any) => !d.duplicate_check?.is_potential_duplicate);
 
-        for (const orderData of novel) {
-          await executeCreateOrder(rawInputToOrderData(orderData, input, user.uid, clientId, projectId));
-        }
+          for (const orderData of novel) {
+            await executeCreateOrder(rawInputToOrderData(orderData, input, user.uid, clientId, projectId));
+          }
 
-        if (duplicates.length > 0) {
-          const firstDup = duplicates[0];
-          setDuplicateCheck({
-            isDuplicate: true,
-            reason: firstDup.duplicate_check.reason,
-            similarOrderId: firstDup.duplicate_check.similarOrderId
-          });
-          setPendingOrder({ input, existingOrders, structuredData: firstDup, clientId, projectId });
-          setIsProcessing(false);
-          return;
+          if (duplicates.length > 0) {
+            const firstDup = duplicates[0];
+            setDuplicateCheck({
+              isDuplicate: true,
+              reason: firstDup.duplicate_check.reason,
+              similarOrderId: firstDup.duplicate_check.similarOrderId
+            });
+            setPendingOrder({ input, existingOrders, structuredData: firstDup, clientId, projectId });
+            setIsProcessing(false);
+            return;
+          }
+        } else {
+          // No specific tasks to create, but maybe client/project were handled
+          toast.success(result.text_response || "Daten verarbeitet.");
+          onOrderCreated();
         }
 
         setInput("");
@@ -327,7 +332,7 @@ export default function OrderInput({ onOrderCreated, onQuery, hideAiResponseText
   };
 
   return (
-    <div className="bento-gradient min-h-[220px] flex flex-col justify-between overflow-hidden">
+    <div className="bento-gradient h-full flex flex-col justify-between overflow-hidden">
       <div>
         <h3 className="text-accent-400 font-semibold mb-1 uppercase text-xs tracking-wider">Schnellerfassung</h3>
         <p className="text-2xl font-light text-slate-900 dark:text-white mb-6">Wie kann ich helfen?</p>
@@ -379,7 +384,12 @@ export default function OrderInput({ onOrderCreated, onQuery, hideAiResponseText
         <Button 
           onClick={handleSubmit} 
           disabled={isProcessing || !input.trim()}
-          className="flex-1 h-12 rounded-xl bg-accent-500 hover:bg-accent-400 text-slate-950 font-bold gap-3 transition-all disabled:bg-white dark:bg-slate-800 disabled:text-slate-600"
+          className={cn(
+            "flex-1 h-12 rounded-xl font-bold gap-3 transition-all",
+            input.trim().length > 0
+              ? "bg-accent-500 hover:bg-accent-400 text-slate-950"
+              : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
+          )}
         >
           {isProcessing ? (
             <Loader2 className="w-5 h-5 animate-spin" />
@@ -391,15 +401,6 @@ export default function OrderInput({ onOrderCreated, onQuery, hideAiResponseText
           )}
         </Button>
       </div>
-
-      {aiResponse && (
-        <div className="mt-4 p-4 bg-accent-950/30 border border-accent-900/50 rounded-2xl">
-          <h4 className="text-accent-400 font-bold text-xs uppercase tracking-wider mb-2 flex items-center gap-2">
-            <Sparkles className="w-3 h-3" /> Agent Antwort
-          </h4>
-          <p className="text-slate-800 dark:text-slate-200 text-sm whitespace-pre-wrap">{aiResponse}</p>
-        </div>
-      )}
 
       {/* Dubletten-Check Dialog */}
       <AlertDialog open={!!duplicateCheck} onOpenChange={() => { setDuplicateCheck(null); setPendingOrder(null); }}>
@@ -450,7 +451,7 @@ export default function OrderInput({ onOrderCreated, onQuery, hideAiResponseText
               onClick={async () => {
                 if (pendingOrder) {
                   setDuplicateCheck(null);
-                  await executeCreateOrder(rawInputToOrderData(pendingOrder.structuredData, pendingOrder.input, user!.uid, pendingOrder.clientId));
+                  await executeCreateOrder(rawInputToOrderData(pendingOrder.structuredData, pendingOrder.input, user!.uid, pendingOrder.clientId, pendingOrder.projectId || null));
                 }
               }}
               className="w-full bg-accent-600 hover:bg-accent-500 text-slate-900 dark:text-white font-bold h-11 rounded-xl text-xs uppercase tracking-tight"
@@ -539,7 +540,7 @@ export default function OrderInput({ onOrderCreated, onQuery, hideAiResponseText
                         setInput("");
                         onOrderCreated();
                         setPendingAction(null);
-                        setAiResponse(null);
+                        if (onAiResponse) onAiResponse('');
                     } catch (e: any) {
                         toast.error(`Fehler: ${e.message}`);
                     } finally {

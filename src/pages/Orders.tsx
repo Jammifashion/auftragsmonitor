@@ -15,7 +15,8 @@ import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
 import { Button } from "../components/ui/button";
-import { Calendar, MoreVertical, Trash2, CheckCircle, Clock, CalendarCheck, Merge, X, Edit } from "lucide-react";
+import { Calendar, MoreVertical, Trash2, CheckCircle, Clock, CalendarCheck, Merge, X, Edit, Sparkles } from "lucide-react";
+import ReactMarkdown from 'react-markdown';
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { createGoogleCalendarEvent } from "../services/calendarService";
@@ -151,6 +152,7 @@ export default function Orders() {
   const [detailClient, setDetailClient] = useState<any>(null);
   const [calendarOrder, setCalendarOrder] = useState<any>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [queryState, setQueryState] = useState<any>(null);
@@ -162,8 +164,17 @@ export default function Orders() {
   const [projects, setProjects] = useState<any[]>([]);
 
   useEffect(() => {
-    if (location.state?.filter) {
-      setTypeFilter(location.state.filter);
+    if (location.state) {
+      if (location.state.filter) {
+        setTypeFilter(location.state.filter);
+      }
+      if (location.state.queryData) {
+        setQueryState(location.state.queryData);
+      }
+      if (location.state.aiResponse) {
+        setAiResponse(location.state.aiResponse);
+      }
+      window.history.replaceState({}, document.title);
     }
   }, [location.state]);
 
@@ -357,8 +368,23 @@ export default function Orders() {
       <MobileMenu isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
 
       <div className="flex-1 overflow-auto p-4 md:p-8 space-y-8 md:space-y-12">
-        <section className="max-w-4xl mx-auto">
-          <OrderInput onOrderCreated={fetchOrders} onQuery={handleQuery} />
+        <section className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
+          <OrderInput onOrderCreated={fetchOrders} onQuery={handleQuery} onAiResponse={setAiResponse} />
+          
+          <div className="flex flex-col h-full bg-slate-100 dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 overflow-y-auto">
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                <Sparkles className="w-4 h-4"/> KI-Kontext
+            </h3>
+            {aiResponse ? (
+                <div className="prose prose-sm dark:prose-invert prose-slate flex-1">
+                   <ReactMarkdown>{aiResponse}</ReactMarkdown>
+                </div>
+            ) : (
+                <div className="flex-1 flex items-center justify-center text-slate-400 italic min-h-[150px]">
+                    Keine Antwort verfügbar.
+                </div>
+            )}
+          </div>
         </section>
 
         <section className="max-w-6xl mx-auto space-y-6">

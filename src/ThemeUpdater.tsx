@@ -86,7 +86,7 @@ export function ThemeUpdater() {
     let unsubscribe: () => void;
     
     import('firebase/firestore').then(({ onSnapshot }) => {
-      unsubscribe = onSnapshot(doc(db, "settings", user.uid), (docSnap) => {
+      unsubscribe = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
         const accent = docSnap.exists() ? (docSnap.data().accent || 'emerald') : 'emerald';
         const colors = (COLOR_MAP as any)[accent] || COLOR_MAP.emerald;
         applyColorMap(colors);
