@@ -12,7 +12,7 @@ export default function AppHeader({ onMenuClick }: AppHeaderProps) {
     <header className="h-16 bg-slate-50 dark:bg-slate-950 flex items-center justify-between px-4 md:px-8 border-b border-slate-900 shrink-0">
       <div className="flex items-center gap-2 md:gap-4">
         <h1 className="text-lg md:text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center">
-          <span className="hidden md:inline">AUFTRAGS</span><span className="md:hidden">A</span> <span className="text-accent-400">MONITOR</span> 
+          <span className="text-accent-400">TaskLynx</span>
           <span className="hidden md:inline text-slate-600 font-normal ml-2">| Dashboard</span>
         </h1>
       </div>

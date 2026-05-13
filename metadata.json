@@ -1,6 +1,6 @@
 {
-  "name": "OrderTracker AI",
+  "name": "TaskLynx",
   "description": "Eine intelligente PWA zur Erfassung und Strukturierung von Kundenaufträgen via Text, Sprache und Chat. Features: KI-basierte Strukturierung, Duplikatsprüfung und Terminverwaltung.",
   "requestFramePermissions": ["microphone"],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

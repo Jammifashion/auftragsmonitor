@@ -24,6 +24,7 @@ export async function createGoogleCalendarEvent(token: string, event: CalendarEv
 
   if (!response.ok) {
     const errorBody = await response.json();
+    console.error('Calendar API error:', errorBody);
     throw new Error(errorBody.error?.message || 'Failed to create calendar event');
   }
 
@@ -48,6 +49,7 @@ export async function createGoogleTask(token: string, task: GoogleTask) {
 
   if (!response.ok) {
     const errorBody = await response.json();
+    console.error('Task API error:', errorBody);
     throw new Error(errorBody.error?.message || 'Failed to create Google Task');
   }
 

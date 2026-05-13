@@ -79,9 +79,13 @@ function CalendarEditDialog({ order, onClose, googleToken }: { order: any, onClo
       await createGoogleCalendarEvent(googleToken, event);
       toast.success("Erfolgreich im Kalender eingetragen");
       onClose();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      toast.error("Fehler beim Erstellen des Kalendereintrags.");
+      if (e.message.includes('401') || e.message.includes('authentication')) {
+        toast.error("Kalender-Anbindung abgelaufen. Bitte neu anmelden.");
+      } else {
+        toast.error("Fehler beim Erstellen des Kalendereintrags: " + e.message);
+      }
     } finally {
       setIsSubmitting(false);
     }
